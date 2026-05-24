@@ -13,6 +13,7 @@ import { MessageMetadata } from '@/components/AssistantChat/messages/MessageMeta
 import { CodexReviewCard } from '@/components/AssistantChat/messages/CodexReviewCard'
 import { MessageTimestamp } from '@/components/AssistantChat/messages/MessageTimestamp'
 import { MessageBranchMenu } from '@/components/AssistantChat/messages/MessageBranchMenu'
+import { useHappyChatContext } from '@/components/AssistantChat/context'
 
 const TOOL_COMPONENTS = {
     Fallback: HappyToolMessage
@@ -29,6 +30,11 @@ export function HappyAssistantMessage() {
     const { copied, copy } = useCopyToClipboard()
     const [showMetadata, setShowMetadata] = useState(false)
     const messageSeq = useAssistantState(({ message }) => (message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined)?.seq)
+    // Fallback for streaming/partial cards: when the block's own seq is
+    // undefined (pending message), branch at the last committed seq so the
+    // button is reachable mid-stream. See assistant-runtime.computeLastCommittedSeq.
+    const { lastCommittedSeq } = useHappyChatContext()
+    const branchSeq = typeof messageSeq === 'number' ? messageSeq : lastCommittedSeq
     const messageId = useAssistantState(({ message }) => message.id)
     const isCliOutput = useAssistantState(({ message }) => {
         const custom = message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined
@@ -78,8 +84,8 @@ export function HappyAssistantMessage() {
                 <CliOutputBlock text={cliText} />
                 <div className="mt-1 flex items-center gap-2">
                     <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
-                    {typeof messageSeq === 'number' && (
-                        <MessageBranchMenu messageSeq={messageSeq} />
+                    {typeof branchSeq === 'number' && (
+                        <MessageBranchMenu messageSeq={branchSeq} />
                     )}
                     {hasMetadata && (
                         <button
@@ -116,8 +122,8 @@ export function HappyAssistantMessage() {
                         <CodexReviewCard review={codexReview} />
                         <div className="mt-1 flex items-center gap-2">
                             <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
-                            {typeof messageSeq === 'number' && (
-                                <MessageBranchMenu messageSeq={messageSeq} />
+                            {typeof branchSeq === 'number' && (
+                                <MessageBranchMenu messageSeq={branchSeq} />
                             )}
                             {hasMetadata && (
                                 <button
@@ -169,8 +175,8 @@ export function HappyAssistantMessage() {
                     <MessagePrimitive.Content components={MESSAGE_PART_COMPONENTS} />
                     <div className="mt-1 flex items-center gap-2">
                         <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
-                        {typeof messageSeq === 'number' && (
-                            <MessageBranchMenu messageSeq={messageSeq} />
+                        {typeof branchSeq === 'number' && (
+                            <MessageBranchMenu messageSeq={branchSeq} />
                         )}
                         {hasMetadata && (
                             <button
@@ -207,8 +213,8 @@ export function HappyAssistantMessage() {
                     <MessagePrimitive.Content components={MESSAGE_PART_COMPONENTS} />
                     <div className="mt-1 flex items-center gap-2">
                         <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
-                        {typeof messageSeq === 'number' && (
-                            <MessageBranchMenu messageSeq={messageSeq} />
+                        {typeof branchSeq === 'number' && (
+                            <MessageBranchMenu messageSeq={branchSeq} />
                         )}
                         {hasMetadata && (
                             <button

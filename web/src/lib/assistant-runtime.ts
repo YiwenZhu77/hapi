@@ -283,6 +283,34 @@ export function aggregateResponseGroups(
     return aggregates
 }
 
+/**
+ * Highest `seq` across all visible blocks that have one. Tool-group blocks
+ * are derived views with no own seq; we look inside their contributing
+ * tool-calls. Returns `undefined` when nothing in the timeline carries a
+ * server-assigned seq (e.g. an all-pending optimistic state).
+ *
+ * Used as a fallback branch point for the per-message branch button when
+ * mounted on a streaming/partial card whose own seq is still undefined —
+ * branching at the last committed seq lands on the user prompt (or last
+ * settled block) that triggered the in-flight stream.
+ */
+export function computeLastCommittedSeq(blocks: readonly VisibleChatBlock[]): number | undefined {
+    let max: number | undefined
+    const consider = (seq: number | undefined) => {
+        if (typeof seq !== 'number') return
+        if (max === undefined || seq > max) max = seq
+    }
+    for (const block of blocks) {
+        if (block.kind === 'tool-group') {
+            for (const tool of block.tools) consider(tool.seq)
+            continue
+        }
+        if (block.kind === 'agent-event') continue
+        consider(block.seq)
+    }
+    return max
+}
+
 function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
     if (block.kind === 'user-text') {
         const messageId = `user:${block.id}`

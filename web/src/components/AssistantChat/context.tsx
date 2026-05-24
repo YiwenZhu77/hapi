@@ -15,6 +15,14 @@ export type HappyChatContextValue = {
     hasMoreMessages: boolean
     isLoadingMoreMessages: boolean
     loadOlderMessagesPreservingScroll: () => Promise<boolean>
+    /**
+     * Highest committed message seq in the visible timeline (computed by
+     * the caller from `VisibleChatBlock[]`). Used as a fallback branch
+     * point when a per-message action is mounted on a streaming/partial
+     * card whose own seq is undefined. Undefined only when no block in
+     * the timeline carries a seq (e.g. a fresh, all-pending session).
+     */
+    lastCommittedSeq?: number
 }
 
 const HappyChatContext = createContext<HappyChatContextValue | null>(null)

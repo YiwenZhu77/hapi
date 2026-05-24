@@ -23,7 +23,7 @@ import type { PendingSchedule } from '@/components/AssistantChat/ScheduleTimePic
 import { resolvePendingSchedule } from '@/components/AssistantChat/ScheduleTimePicker'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { QueuedMessagesBar } from '@/components/AssistantChat/QueuedMessagesBar'
-import { useHappyRuntime } from '@/lib/assistant-runtime'
+import { computeLastCommittedSeq, useHappyRuntime } from '@/lib/assistant-runtime'
 import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
 import { useTranslation } from '@/lib/use-translation'
 import { SessionHeader } from '@/components/SessionHeader'
@@ -372,6 +372,14 @@ export function SessionChat(props: {
         [reconciled.blocks]
     )
 
+    // Computed for the per-message branch button so it can address a stable
+    // history point when mounted on a streaming/partial card (which has no
+    // own seq yet). See `computeLastCommittedSeq` for semantics.
+    const lastCommittedSeq = useMemo(
+        () => computeLastCommittedSeq(visibleBlocks),
+        [visibleBlocks]
+    )
+
     const outlineTitle = useMemo(
         () => getOutlineTitle(props.session),
         [props.session]
@@ -567,6 +575,7 @@ export function SessionChat(props: {
                         outlineTitle={outlineTitle}
                         outlineItems={outlineItems}
                         onOutlineOpenChange={setOutlineOpen}
+                        lastCommittedSeq={lastCommittedSeq}
                     />
 
                     {codexCollaborationModeSupported && codexModelsState.error ? (

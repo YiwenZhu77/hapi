@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateResponseGroups } from './assistant-runtime'
+import { aggregateResponseGroups, computeLastCommittedSeq } from './assistant-runtime'
 import type { AgentEventBlock, AgentTextBlock, CliOutputBlock, ToolCallBlock, UserTextBlock } from '@/chat/types'
 import type { ToolGroupBlock, VisibleChatBlock } from '@/chat/toolGroups'
 
@@ -613,5 +613,44 @@ describe('aggregateResponseGroups', () => {
         const meta = aggregates.get('a1')
         expect(meta?.usage?.cache_creation_input_tokens).toBe(300)
         expect(meta?.usage?.cache_read_input_tokens).toBe(100)
+    })
+})
+
+describe('computeLastCommittedSeq', () => {
+    it('returns the max defined seq across blocks, ignoring undefined', () => {
+        // Mid-stream timeline: settled user (seq=1), settled agent (seq=2),
+        // and a streaming agent-text + tool-call with no seq yet.
+        const blocks: VisibleChatBlock[] = [
+            userText('u1', { seq: 1 }),
+            agentText('a1', { seq: 2 }),
+            agentText('a2', { seq: undefined }),
+            toolCall('t1', { seq: undefined })
+        ]
+        expect(computeLastCommittedSeq(blocks)).toBe(2)
+    })
+
+    it('returns undefined when no block carries a seq', () => {
+        const blocks: VisibleChatBlock[] = [
+            agentText('a1', { seq: undefined }),
+            toolCall('t1', { seq: undefined })
+        ]
+        expect(computeLastCommittedSeq(blocks)).toBeUndefined()
+    })
+
+    it('looks inside tool-group blocks at each contributing tool seq', () => {
+        const group = toolGroup('g1', [
+            toolCall('t1', { seq: 4 }),
+            toolCall('t2', { seq: 7 }),
+            toolCall('t3', { seq: undefined })
+        ])
+        const blocks: VisibleChatBlock[] = [
+            userText('u1', { seq: 1 }),
+            group
+        ]
+        expect(computeLastCommittedSeq(blocks)).toBe(7)
+    })
+
+    it('handles an empty timeline', () => {
+        expect(computeLastCommittedSeq([])).toBeUndefined()
     })
 })

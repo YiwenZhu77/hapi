@@ -12,19 +12,32 @@ import type { BranchedSession } from '@/api/client'
  *
  * sessionId is sourced from HappyChatContext (single source of truth);
  * callers only supply the seq + onBranched callback.
+ *
+ * `messageSeq` is optional: when omitted (e.g. mounted on a streaming
+ * card whose own seq is undefined) the menu falls back to the context's
+ * `lastCommittedSeq`, i.e. the highest seq currently in the timeline.
+ * That typically points at the user prompt that triggered the in-flight
+ * stream, making branch-from-here reachable mid-stream.
  */
 export function MessageBranchMenu(props: {
-    messageSeq: number
+    messageSeq?: number
     onBranched?: (newSessionId: string) => void
     className?: string
 }) {
-    const { api, sessionId } = useHappyChatContext()
+    const { api, sessionId, lastCommittedSeq } = useHappyChatContext()
     const queryClient = useQueryClient()
     const { haptic } = usePlatform()
     const { addToast } = useToast()
 
+    const effectiveSeq = props.messageSeq ?? lastCommittedSeq
+
     const mutation = useMutation<BranchedSession, Error, void>({
-        mutationFn: () => api.branchSession(sessionId, props.messageSeq),
+        mutationFn: () => {
+            if (typeof effectiveSeq !== 'number') {
+                return Promise.reject(new Error('No branch point available yet'))
+            }
+            return api.branchSession(sessionId, effectiveSeq)
+        },
         onSuccess: (child) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) })
@@ -45,15 +58,18 @@ export function MessageBranchMenu(props: {
     })
 
     const isBranching = mutation.isPending
+    const disabled = isBranching || typeof effectiveSeq !== 'number'
     const baseClassName = 'text-[10px] text-[var(--app-hint)] underline-offset-2 hover:text-[var(--app-fg)] hover:underline disabled:opacity-50'
     const className = props.className ? `${baseClassName} ${props.className}` : baseClassName
 
     return (
         <button
             type="button"
-            disabled={isBranching}
+            disabled={disabled}
             onClick={() => mutation.mutate()}
-            title={`Branch from this message (seq ${props.messageSeq})`}
+            title={typeof effectiveSeq === 'number'
+                ? `Branch from this message (seq ${effectiveSeq})`
+                : 'Branch unavailable until first message is committed'}
             aria-label="Branch from this message"
             className={className}
         >

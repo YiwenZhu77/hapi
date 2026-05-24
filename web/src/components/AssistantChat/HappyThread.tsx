@@ -263,6 +263,7 @@ export function HappyThread(props: {
     outlineItems: readonly ConversationOutlineItem[]
     onOutlineOpenChange: (open: boolean) => void
     onOutlineItemClick?: (item: ConversationOutlineItem) => void
+    lastCommittedSeq?: number
 }) {
     const { t } = useTranslation()
     const { terminalToolDisplayMode } = useTerminalToolDisplayMode()
@@ -684,7 +685,8 @@ export function HappyThread(props: {
             onRetryMessage: props.onRetryMessage,
             hasMoreMessages: props.hasMoreMessages,
             isLoadingMoreMessages: props.isLoadingMoreMessages,
-            loadOlderMessagesPreservingScroll: loadOlderPreservingScroll
+            loadOlderMessagesPreservingScroll: loadOlderPreservingScroll,
+            lastCommittedSeq: props.lastCommittedSeq
         }}>
             <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col relative">
                 <ThreadPrimitive.Viewport

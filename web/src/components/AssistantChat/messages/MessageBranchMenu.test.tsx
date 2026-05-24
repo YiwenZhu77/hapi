@@ -26,7 +26,7 @@ function makeChild(overrides: Partial<BranchedSession> = {}): BranchedSession {
     }
 }
 
-function makeContext(api: ApiClient, sessionId: string = 'parent-1'): HappyChatContextValue {
+function makeContext(api: ApiClient, sessionId: string = 'parent-1', lastCommittedSeq?: number): HappyChatContextValue {
     return {
         api,
         sessionId,
@@ -37,25 +37,33 @@ function makeContext(api: ApiClient, sessionId: string = 'parent-1'): HappyChatC
         hasMoreMessages: false,
         isLoadingMoreMessages: false,
         loadOlderMessagesPreservingScroll: vi.fn().mockResolvedValue(false),
+        lastCommittedSeq,
     } as HappyChatContextValue
 }
 
-function renderMenu(api: ApiClient, props: { onBranched?: (id: string) => void; sessionId?: string; messageSeq?: number } = {}) {
+function renderMenu(api: ApiClient, props: {
+    onBranched?: (id: string) => void
+    sessionId?: string
+    messageSeq?: number
+    omitMessageSeq?: boolean
+    lastCommittedSeq?: number
+} = {}) {
     const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
     const sessionId = props.sessionId ?? 'parent-1'
     function Wrapper({ children }: { children: ReactNode }) {
         return (
             <QueryClientProvider client={queryClient}>
                 <ToastProvider>
-                    <HappyChatProvider value={makeContext(api, sessionId)}>{children}</HappyChatProvider>
+                    <HappyChatProvider value={makeContext(api, sessionId, props.lastCommittedSeq)}>{children}</HappyChatProvider>
                 </ToastProvider>
             </QueryClientProvider>
         )
     }
+    const seq = props.omitMessageSeq ? undefined : (props.messageSeq ?? 42)
     return render(
         <Wrapper>
             <MessageBranchMenu
-                messageSeq={props.messageSeq ?? 42}
+                messageSeq={seq}
                 onBranched={props.onBranched}
             />
         </Wrapper>
@@ -111,5 +119,37 @@ describe('MessageBranchMenu', () => {
         await waitFor(() => {
             expect((button as HTMLButtonElement).disabled).toBe(false)
         })
+    })
+
+    it('falls back to context lastCommittedSeq when messageSeq prop is undefined', async () => {
+        const child = makeChild({ branchedFromSeq: 5 })
+        const branchSession = vi.fn().mockResolvedValue(child)
+        const api = { branchSession } as unknown as ApiClient
+        const onBranched = vi.fn()
+
+        renderMenu(api, { onBranched, omitMessageSeq: true, lastCommittedSeq: 5 })
+
+        const button = screen.getByRole('button', { name: 'Branch from this message' })
+        expect((button as HTMLButtonElement).disabled).toBe(false)
+        fireEvent.click(button)
+
+        await waitFor(() => {
+            expect(branchSession).toHaveBeenCalledWith('parent-1', 5)
+        })
+        await waitFor(() => {
+            expect(onBranched).toHaveBeenCalledWith('child-1')
+        })
+    })
+
+    it('disables the button when neither messageSeq prop nor lastCommittedSeq is available', () => {
+        const branchSession = vi.fn()
+        const api = { branchSession } as unknown as ApiClient
+
+        renderMenu(api, { omitMessageSeq: true })
+
+        const button = screen.getByRole('button', { name: 'Branch from this message' })
+        expect((button as HTMLButtonElement).disabled).toBe(true)
+        fireEvent.click(button)
+        expect(branchSession).not.toHaveBeenCalled()
     })
 })
