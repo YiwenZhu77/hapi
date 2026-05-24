@@ -21,33 +21,52 @@ export type BranchSessionOptions = {
     newName?: string
 }
 
+export type AttachBranchOptions = {
+    /** ID of the already-spawned child session row (created by the runner) */
+    sessionId: string
+    /** Parent session to link to */
+    parentSessionId: string
+    /** Cutoff seq on the parent — messages with seq <= this value are copied */
+    branchedFromSeq: number
+    /** Optional explicit tag/name for the child. If omitted, computed from parent name. */
+    newName?: string
+}
+
 /**
- * Create a new session branched from an existing parent session.
+ * Attach branch-provenance to an already-spawned session.
  *
- * - Copies the parent row (namespace, model, metadata, etc.) into a new session
- *   with a fresh UUID, recording parent_session_id + branched_from_seq.
- * - Copies all messages with seq <= branchedFromSeq into the child session,
- *   assigning fresh UUIDs and sequential seq numbers starting at 1.
- * - local_id is set to NULL on copied messages to avoid UNIQUE constraint
- *   collisions with the parent's local_id index.
- * - Does NOT modify the parent session or its messages.
+ * Used by the syncEngine.branchSession flow: the runner has already spawned a
+ * fresh agent process and inserted the session row. This helper:
+ *   - Stamps parent_session_id + branched_from_seq onto the spawned row.
+ *   - Copies parent messages with seq <= branchedFromSeq into the spawned session
+ *     (assigning fresh UUIDs + sequential seq numbers starting at 1). local_id is
+ *     NULL on copied rows to avoid UNIQUE collisions.
+ *   - Sets the human-readable tag to `${parentName}_${N+2}` where N is the
+ *     existing branch count for this parent (or to `newName` if provided).
  *
- * Throws if the parent session does not exist.
+ * Does NOT touch the parent session or its messages. Does NOT modify the
+ * spawned session's metadata, agent_state, model, etc. — those came from the
+ * runner's spawn and reflect the new fresh process.
+ *
+ * Throws if the parent or spawned session is missing.
  */
-export function branchSession(
+export function attachBranchToSession(
     db: Database,
-    { parentSessionId, branchedFromSeq, newName }: BranchSessionOptions
+    { sessionId, parentSessionId, branchedFromSeq, newName }: AttachBranchOptions
 ): StoredSession {
     const parent = getSession(db, parentSessionId)
     if (!parent) {
-        throw new Error(`branchSession: parent session '${parentSessionId}' not found`)
+        throw new Error(`attachBranchToSession: parent session '${parentSessionId}' not found`)
+    }
+    const child = getSession(db, sessionId)
+    if (!child) {
+        throw new Error(`attachBranchToSession: spawned session '${sessionId}' not found`)
     }
 
     const now = Date.now()
-    const childId = randomUUID()
-    // Prefer the human-readable name from metadata (set via session rename UI)
-    // over `tag`, which often stores an opaque agent-session id like a UUID.
-    // Fall back to tag, then to a short prefix of the parent id.
+
+    // Prefer the human-readable name from metadata over `tag` (which often
+    // stores an opaque agent-session UUID). Fall back to tag, then parent id prefix.
     const parentDisplayName = (() => {
         const meta = parent.metadata
         if (meta && typeof meta === 'object' && typeof (meta as Record<string, unknown>).name === 'string') {
@@ -57,97 +76,49 @@ export function branchSession(
         if (parent.tag && parent.tag.trim()) return parent.tag
         return parentSessionId.slice(0, 8)
     })()
+
     // Sequential numbering: parent is implicitly _1, first branch is _2, etc.
-    // Counts only branches actually descended from this parent (parent_session_id
-    // match) so renaming or unrelated tags with similar suffixes don't bump the
-    // number unexpectedly.
+    // Excludes the just-spawned child itself (it has no parent_session_id yet).
     const existingBranchCount = (db.prepare(
         'SELECT COUNT(*) AS n FROM sessions WHERE parent_session_id = ?'
     ).get(parentSessionId) as { n: number } | undefined)?.n ?? 0
     const childTag = newName ?? `${parentDisplayName}_${existingBranchCount + 2}`
 
-    // Strip agent-session-id fields from copied metadata. The branched session is a
-    // new conversation; the hub's deduplicateByAgentSessionId treats sessions sharing
-    // a claudeSessionId / codexSessionId / etc. as duplicates and merges them — which
-    // would delete the new branch. The agent-session-ids will be re-assigned when the
-    // branch is resumed/started for the first time.
-    const metadataJson = (() => {
-        if (parent.metadata === null || parent.metadata === undefined) return null
-        if (typeof parent.metadata !== 'object') return JSON.stringify(parent.metadata)
-        const stripped = { ...(parent.metadata as Record<string, unknown>) }
-        delete stripped.claudeSessionId
-        delete stripped.codexSessionId
-        delete stripped.geminiSessionId
-        delete stripped.opencodeSessionId
-        delete stripped.cursorSessionId
-        return JSON.stringify(stripped)
-    })()
-    const agentStateJson = parent.agentState !== null && parent.agentState !== undefined
-        ? JSON.stringify(parent.agentState)
-        : null
-    const todosJson = parent.todos !== null && parent.todos !== undefined
-        ? JSON.stringify(parent.todos)
-        : null
-    const teamStateJson = parent.teamState !== null && parent.teamState !== undefined
-        ? JSON.stringify(parent.teamState)
-        : null
-
     db.transaction(() => {
-        // 1. Insert new child session row
+        // 1. Stamp parent linkage + tag onto the spawned session row.
         db.prepare(`
-            INSERT INTO sessions (
-                id, tag, namespace, machine_id,
-                created_at, updated_at,
-                metadata, metadata_version,
-                agent_state, agent_state_version,
-                model, model_reasoning_effort, effort,
-                todos, todos_updated_at,
-                team_state, team_state_updated_at,
-                active, active_at, seq,
-                parent_session_id, branched_from_seq
-            ) VALUES (
-                @id, @tag, @namespace, NULL,
-                @created_at, @updated_at,
-                @metadata, @metadata_version,
-                @agent_state, @agent_state_version,
-                @model, @model_reasoning_effort, @effort,
-                @todos, @todos_updated_at,
-                @team_state, @team_state_updated_at,
-                0, NULL, 0,
-                @parent_session_id, @branched_from_seq
-            )
+            UPDATE sessions
+            SET parent_session_id = @parent_session_id,
+                branched_from_seq = @branched_from_seq,
+                tag = @tag,
+                updated_at = @updated_at
+            WHERE id = @id
         `).run({
-            id: childId,
-            tag: childTag,
-            namespace: parent.namespace,
-            created_at: now,
-            updated_at: now,
-            metadata: metadataJson,
-            metadata_version: parent.metadataVersion,
-            agent_state: agentStateJson,
-            agent_state_version: parent.agentStateVersion,
-            model: parent.model ?? null,
-            model_reasoning_effort: parent.modelReasoningEffort ?? null,
-            effort: parent.effort ?? null,
-            todos: todosJson,
-            todos_updated_at: parent.todosUpdatedAt ?? null,
-            team_state: teamStateJson,
-            team_state_updated_at: parent.teamStateUpdatedAt ?? null,
+            id: sessionId,
             parent_session_id: parentSessionId,
-            branched_from_seq: branchedFromSeq
+            branched_from_seq: branchedFromSeq,
+            tag: childTag,
+            updated_at: now
         })
 
-        // 2. Copy messages with seq <= branchedFromSeq, ordered by seq ASC
+        // 2. Copy parent messages with seq <= branchedFromSeq.
         const parentMsgs = db.prepare(
             'SELECT * FROM messages WHERE session_id = ? AND seq <= ? ORDER BY seq ASC'
         ).all(parentSessionId, branchedFromSeq) as DbMessageRow[]
 
+        // Find current max seq on the spawned session (the runner may have already
+        // recorded a message or two during spawn). We insert copied messages
+        // starting at max+1 so we never collide with whatever the runner created.
+        const existingMax = (db.prepare(
+            'SELECT COALESCE(MAX(seq), 0) AS m FROM messages WHERE session_id = ?'
+        ).get(sessionId) as { m: number } | undefined)?.m ?? 0
+
         for (let i = 0; i < parentMsgs.length; i++) {
             const msg = parentMsgs[i]
-            const childSeq = i + 1
-            // Stamp invoked_at: messages without local_id were invoked at insert time
-            // in the original; preserve that. Messages with local_id had an ack path —
-            // in the branch they have no local_id so treat as already-invoked.
+            const childSeq = existingMax + i + 1
+            // Messages without local_id were invoked at insert time in the original;
+            // preserve that. Messages with local_id had an ack path — in the branch
+            // they have no local_id so treat as already-invoked.
             const invokedAt = msg.invoked_at ?? now
 
             db.prepare(`
@@ -160,7 +131,7 @@ export function branchSession(
                 )
             `).run({
                 id: randomUUID(),
-                session_id: childId,
+                session_id: sessionId,
                 content: msg.content,
                 created_at: msg.created_at,
                 seq: childSeq,
@@ -169,9 +140,9 @@ export function branchSession(
         }
     })()
 
-    const child = getSession(db, childId)
-    if (!child) {
-        throw new Error('branchSession: failed to retrieve newly created child session')
+    const updated = getSession(db, sessionId)
+    if (!updated) {
+        throw new Error('attachBranchToSession: failed to re-read updated child session')
     }
-    return child
+    return updated
 }

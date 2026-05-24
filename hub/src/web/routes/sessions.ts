@@ -633,7 +633,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         try {
-            const child = engine.branchSession({
+            const child = await engine.branchSession({
                 parentSessionId: parentId,
                 branchedFromSeq: body.branchedFromSeq,
                 newName: typeof body.newName === 'string' ? body.newName : undefined

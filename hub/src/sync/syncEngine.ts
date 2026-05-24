@@ -346,10 +346,78 @@ export class SyncEngine {
         return this.machineCache.getOrCreateMachine(id, metadata, runnerState, namespace)
     }
 
-    branchSession(opts: BranchSessionOptions): StoredSession {
-        // Create the child session row in the DB
-        const child = this.store.sessions.branchSession(opts)
-        // Load the new session into the in-memory cache and emit session-added SSE
+    async branchSession(opts: BranchSessionOptions): Promise<StoredSession> {
+        const { parentSessionId, branchedFromSeq, newName } = opts
+
+        // 1. Resolve parent + its settings.
+        const parent = this.sessionCache.getSession(parentSessionId)
+            ?? this.sessionCache.refreshSession(parentSessionId)
+        if (!parent) {
+            throw new Error(`branchSession: parent session '${parentSessionId}' not found`)
+        }
+        const metadata = parent.metadata
+        if (!metadata || typeof metadata.path !== 'string' || metadata.path.length === 0) {
+            throw new Error('branchSession: parent session has no working directory in metadata.path')
+        }
+
+        const namespace = parent.namespace
+        const flavor = this.resolveFlavor(parent)
+
+        // 2. Find an online machine to spawn on. Prefer parent's machine; fall
+        //    back to any online machine in the namespace.
+        const onlineMachines = this.machineCache.getOnlineMachinesByNamespace(namespace)
+        if (onlineMachines.length === 0) {
+            throw new Error('branchSession: No machine online')
+        }
+        const targetMachine = (() => {
+            if (metadata.machineId) {
+                const exact = onlineMachines.find((m) => m.id === metadata.machineId)
+                if (exact) return exact
+            }
+            if (metadata.host) {
+                const hostMatch = onlineMachines.find((m) => m.metadata?.host === metadata.host)
+                if (hostMatch) return hostMatch
+            }
+            return onlineMachines[0]
+        })()
+
+        // 3. Spawn a fresh session inheriting parent's settings. resumeSessionId
+        //    is left undefined: the branch is a new conversation, not a resume.
+        const spawnResult = await this.rpcGateway.spawnSession(
+            targetMachine.id,
+            metadata.path,
+            flavor,
+            parent.model ?? undefined,
+            parent.modelReasoningEffort ?? undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            parent.effort ?? undefined,
+            parent.permissionMode ?? undefined
+        )
+
+        if (spawnResult.type !== 'success') {
+            throw new Error(`branchSession: spawn failed — ${spawnResult.message}`)
+        }
+
+        // 4. Wait for the runner to actually start the process and persist its row.
+        const becameActive = await this.waitForSessionActive(spawnResult.sessionId)
+        if (!becameActive) {
+            throw new Error('branchSession: spawned session failed to become active')
+        }
+
+        // 5. Stamp parent linkage + copy messages onto the just-spawned row.
+        const child = this.store.sessions.attachBranchToSession({
+            sessionId: spawnResult.sessionId,
+            parentSessionId,
+            branchedFromSeq,
+            newName
+        })
+
+        // 6. Refresh cache so the parent_session_id, tag, and copied messages
+        //    are reflected in-memory and an updated session-added/session-updated
+        //    event is emitted to subscribers.
         this.sessionCache.refreshSession(child.id)
         return child
     }

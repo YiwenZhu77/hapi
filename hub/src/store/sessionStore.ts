@@ -17,7 +17,7 @@ import {
     updateSessionAgentState,
     updateSessionMetadata
 } from './sessions'
-import { branchSession, type BranchSessionOptions } from './sessionBranch'
+import { attachBranchToSession, type AttachBranchOptions } from './sessionBranch'
 
 export class SessionStore {
     private readonly db: Database
@@ -106,7 +106,7 @@ export class SessionStore {
         return deleteSession(this.db, id, namespace)
     }
 
-    branchSession(opts: BranchSessionOptions): StoredSession {
-        return branchSession(this.db, opts)
+    attachBranchToSession(opts: AttachBranchOptions): StoredSession {
+        return attachBranchToSession(this.db, opts)
     }
 }
