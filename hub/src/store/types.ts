@@ -19,6 +19,8 @@ export type StoredSession = {
     active: boolean
     activeAt: number | null
     seq: number
+    parentSessionId: string | null
+    branchedFromSeq: number | null
 }
 
 export type StoredMachine = {

@@ -26,6 +26,8 @@ type DbSessionRow = {
     active: number
     active_at: number | null
     seq: number
+    parent_session_id: string | null
+    branched_from_seq: number | null
 }
 
 function toStoredSession(row: DbSessionRow): StoredSession {
@@ -49,7 +51,9 @@ function toStoredSession(row: DbSessionRow): StoredSession {
         teamStateUpdatedAt: row.team_state_updated_at,
         active: row.active === 1,
         activeAt: row.active_at,
-        seq: row.seq
+        seq: row.seq,
+        parentSessionId: row.parent_session_id ?? null,
+        branchedFromSeq: row.branched_from_seq ?? null
     }
 }
 
