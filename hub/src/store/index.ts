@@ -23,7 +23,7 @@ export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
 export { UserStore } from './userStore'
 
-const SCHEMA_VERSION: number = 9
+const SCHEMA_VERSION: number = 10
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -114,6 +114,7 @@ export class Store {
             6: () => this.migrateFromV6ToV7(),
             7: () => this.migrateFromV7ToV8(),
             8: () => this.migrateFromV8ToV9(),
+            9: () => this.migrateFromV9ToV10(),
         })
 
         if (currentVersion === 0) {
@@ -181,10 +182,13 @@ export class Store {
                 team_state_updated_at INTEGER,
                 active INTEGER DEFAULT 0,
                 active_at INTEGER,
-                seq INTEGER DEFAULT 0
+                seq INTEGER DEFAULT 0,
+                parent_session_id TEXT NULL,
+                branched_from_seq INTEGER NULL
             );
             CREATE INDEX IF NOT EXISTS idx_sessions_tag ON sessions(tag);
             CREATE INDEX IF NOT EXISTS idx_sessions_tag_namespace ON sessions(tag, namespace);
+            CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 
             CREATE TABLE IF NOT EXISTS machines (
                 id TEXT PRIMARY KEY,
@@ -414,6 +418,24 @@ export class Store {
                 ON messages(scheduled_at)
                 WHERE scheduled_at IS NOT NULL AND invoked_at IS NULL
         `)
+    }
+
+    private migrateFromV9ToV10(): void {
+        const columns = this.getSessionColumnNames()
+        if (columns.size === 0) {
+            // No sessions table yet — createSchema will build the up-to-date one.
+            return
+        }
+        if (!columns.has('parent_session_id')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN parent_session_id TEXT NULL')
+        }
+        if (!columns.has('branched_from_seq')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN branched_from_seq INTEGER NULL')
+        }
+        // Index for efficient child-session lookup by parent. Idempotent via IF NOT EXISTS.
+        this.db.exec(
+            'CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id)'
+        )
     }
 
     private getSessionColumnNames(): Set<string> {
