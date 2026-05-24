@@ -182,7 +182,7 @@ export function GridView({ sessions, baseUrl, token }: Props) {
     // actionsRef.current so the handler always sees fresh state.
     const actionsRef = useRef({
         focusIframe: (_n: number) => {},
-        moveFocus: (_dir: 'h' | 'j' | 'k' | 'l') => {},
+        moveFocus: (_dir: 'h' | 'j' | 'k' | 'l', _fromIdx?: number) => {},
         toggleStrip: () => {},
         goBack: () => {},
         openAddModal: () => {},
@@ -206,10 +206,14 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         },
         toggleStrip() { setStripMode(prev => !prev) },
         goBack() { navigate({ to: '/sessions' }) },
-        moveFocus(dir: 'h' | 'j' | 'k' | 'l') {
+        moveFocus(dir: 'h' | 'j' | 'k' | 'l', fromIdx?: number) {
             const total = pinnedIds.length
             if (total === 0) return
-            const current = focusedIdx ?? 0
+            // Prefer the caller's explicit position (iframe handler knows which
+            // cell sent the event) over the React state, which may lag if the
+            // user clicked a cell with the mouse without going through
+            // focusIframe.
+            const current = fromIdx !== undefined && fromIdx >= 0 ? fromIdx : (focusedIdx ?? 0)
             // Effective cols for navigation: treat 5-panel as 3-col
             const navCols = total <= 1 ? 1 : total === 3 ? 3 : total <= 4 ? 2 : total === 5 ? 3 : 3
             let next = current
@@ -307,18 +311,27 @@ export function GridView({ sessions, baseUrl, token }: Props) {
 
         win.addEventListener('keydown', handler, true)
 
-        // Same modifier for H/L cycle + ; back + ' toggle strip/grid (kept here
-        // to share key/scope behavior with the main handler).
+        // Same modifier for H/L (+ [/] alias) cycle, J/K 2D motion, ; back,
+        // ' toggle strip/grid (kept here to share key/scope behavior with the
+        // main handler).
         const scrollModHandler = (e: KeyboardEvent) => {
             if (!isPrimaryMod(e) || e.shiftKey) return
-            if (e.code === 'KeyH' || e.code === 'KeyL') {
+            const isPrevKey = e.code === 'KeyH' || e.code === 'BracketLeft'
+            const isNextKey = e.code === 'KeyL' || e.code === 'BracketRight'
+            if (isPrevKey || isNextKey) {
                 e.preventDefault(); e.stopPropagation()
                 const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
                 const total = iframeRefs.current.filter(Boolean).length
                 if (total === 0) return
-                const delta = e.code === 'KeyL' ? 1 : -1
+                const delta = isNextKey ? 1 : -1
                 const next = ((myIdx < 0 ? 0 : myIdx) + delta + total) % total
                 actionsRef.current.focusIframe(next + 1)
+                return
+            }
+            if (e.code === 'KeyJ' || e.code === 'KeyK') {
+                e.preventDefault(); e.stopPropagation()
+                const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
+                actionsRef.current.moveFocus(e.code === 'KeyJ' ? 'j' : 'k', myIdx)
                 return
             }
             if (e.code === 'Semicolon') {
@@ -350,6 +363,7 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             const next = ((cur + delta) % total + total) % total
             actionsRef.current.focusIframe(next + 1)
         },
+        onMoveFocus: (dir) => actionsRef.current.moveFocus(dir),
         onOpenSearch: () => actionsRef.current.openAddModal(),
         onReplaceCell: () => actionsRef.current.openReplaceModal(),
         onCloseCell: () => actionsRef.current.closeCell(),

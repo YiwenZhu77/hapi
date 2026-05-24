@@ -5,8 +5,10 @@ import { isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
 type Options = {
     // Grid mode: <Primary>+1-9 focus nth pinned cell instead of navigating
     onSelectIndex?: (n: number) => void
-    // Grid mode: <Primary>+H/L cycle prev/next pinned cell instead of navigating
+    // Grid mode: <Primary>+H/L (and <Primary>+[ / <Primary>+]) cycle prev/next pinned cell
     onCyclePinned?: (delta: -1 | 1) => void
+    // Grid mode: <Primary>+J/K — 2D vertical motion across the grid
+    onMoveFocus?: (dir: 'j' | 'k') => void
     // <Primary>+P: open search palette (add session to grid, or navigate)
     onOpenSearch?: () => void
     // <Primary>+F: replace currently focused grid cell
@@ -82,8 +84,12 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
         // Mac: Cmd; Windows/Linux: Alt.
         const onScrollMod = (e: KeyboardEvent) => {
             if (!isPrimaryMod(e) || e.shiftKey) return
-            if (e.code === 'KeyH' || e.code === 'KeyL') {
-                const delta = e.code === 'KeyL' ? 1 : -1
+            // H/L and [/] both cycle prev/next pinned cell (grid) or session (non-grid).
+            // [/] is the ergonomic alias.
+            const isPrevKey = e.code === 'KeyH' || e.code === 'BracketLeft'
+            const isNextKey = e.code === 'KeyL' || e.code === 'BracketRight'
+            if (isPrevKey || isNextKey) {
+                const delta = isNextKey ? 1 : -1
                 e.preventDefault()
                 if (options.onCyclePinned) {
                     options.onCyclePinned(delta)
@@ -97,6 +103,14 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
                     : (curIdx + delta + sessions.length) % sessions.length
                 const next = sessions[nextIdx]
                 if (next) navigate({ to: '/sessions/$sessionId', params: { sessionId: next.id } })
+                return
+            }
+            // J/K: 2D vertical motion in grid only. Outside grid we silently ignore
+            // so the keys remain available for browser/site defaults.
+            if (e.code === 'KeyJ' || e.code === 'KeyK') {
+                if (!options.onMoveFocus) return
+                e.preventDefault()
+                options.onMoveFocus(e.code === 'KeyJ' ? 'j' : 'k')
                 return
             }
             if (e.code === 'Semicolon') {
@@ -116,5 +130,5 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
             window.removeEventListener('keydown', onKeyDown, true)
             window.removeEventListener('keydown', onScrollMod, true)
         }
-    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onToggleStrip])
+    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onMoveFocus, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onToggleStrip])
 }
