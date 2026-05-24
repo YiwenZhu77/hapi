@@ -1,18 +1,13 @@
 import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { isPrimaryMod, isDigitFocusMod, isScrollKeyMod } from '@/lib/platform'
-
-/** Pixel delta for vim-style J/K line scroll (≈ 2 lines of body text). */
-const LINE_SCROLL_PX = 60
+import { isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
 
 type Options = {
     // Grid mode: <Primary>+1-9 focus nth pinned cell instead of navigating
     onSelectIndex?: (n: number) => void
     // Grid mode: <Primary>+H/L cycle prev/next pinned cell
     onCyclePinned?: (delta: -1 | 1) => void
-    // Grid mode: <Primary>+J/K scroll focused cell's chat content by line
-    onScrollLine?: (delta: number) => void
-    // Grid mode: <Primary>+[ / <Primary>+] scroll focused cell by half page
+    // Grid mode: <Primary>+J/K scroll focused cell's chat by half a page
     onScrollHalfPage?: (dir: 'up' | 'down') => void
     // <Primary>+P: open search palette (add session to grid, or navigate)
     onOpenSearch?: () => void
@@ -88,9 +83,7 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
         // <Primary>+; → toggle grid view. <Primary>+' → toggle strip/grid layout.
         // Mac: Cmd; Windows/Linux: Alt.
         const onScrollMod = (e: KeyboardEvent) => {
-            // Accept either Alt or Ctrl on Win/Linux — Alt+letter is widely
-            // intercepted by WMs / PWA shells; Ctrl is the reliable fallback.
-            if (!isScrollKeyMod(e) || e.shiftKey) return
+            if (!isPrimaryMod(e) || e.shiftKey) return
             if (e.code === 'KeyH' || e.code === 'KeyL') {
                 const delta = e.code === 'KeyL' ? 1 : -1
                 e.preventDefault()
@@ -108,19 +101,12 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
                 if (next) navigate({ to: '/sessions/$sessionId', params: { sessionId: next.id } })
                 return
             }
-            // J/K scroll the focused cell's chat content by line (grid only).
+            // J/K scroll the focused cell's chat by half a viewport (grid only).
             // Outside grid: ignore so the keys remain free.
             if (e.code === 'KeyJ' || e.code === 'KeyK') {
-                if (!options.onScrollLine) return
-                e.preventDefault()
-                options.onScrollLine(e.code === 'KeyJ' ? LINE_SCROLL_PX : -LINE_SCROLL_PX)
-                return
-            }
-            // [/] scroll the focused cell by half a viewport.
-            if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
                 if (!options.onScrollHalfPage) return
                 e.preventDefault()
-                options.onScrollHalfPage(e.code === 'BracketRight' ? 'down' : 'up')
+                options.onScrollHalfPage(e.code === 'KeyJ' ? 'down' : 'up')
                 return
             }
             if (e.code === 'Semicolon') {
@@ -140,5 +126,5 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
             window.removeEventListener('keydown', onKeyDown, true)
             window.removeEventListener('keydown', onScrollMod, true)
         }
-    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onScrollLine, options.onScrollHalfPage, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onToggleStrip])
+    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onScrollHalfPage, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onToggleStrip])
 }

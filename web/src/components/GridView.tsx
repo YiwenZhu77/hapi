@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard'
 import { SessionSearchModal } from '@/components/SessionSearchModal'
-import { KBD, isPrimaryMod, isDigitFocusMod, isScrollKeyMod } from '@/lib/platform'
+import { KBD, isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { NewSessionModal } from '@/components/NewSessionModal'
 import { useAppContext } from '@/lib/app-context'
@@ -315,33 +315,23 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         // ' toggle strip/grid (kept here to share key/scope behavior with the
         // main handler).
         const scrollModHandler = (e: KeyboardEvent) => {
-            // Accept Alt OR Ctrl on Win/Linux — Alt+letter often hijacked by WM.
-            if (!isScrollKeyMod(e) || e.shiftKey) return
-            const isPrevKey = e.code === 'KeyH' || e.code === 'BracketLeft'
-            const isNextKey = e.code === 'KeyL' || e.code === 'BracketRight'
-            if (isPrevKey || isNextKey) {
+            if (!isPrimaryMod(e) || e.shiftKey) return
+            if (e.code === 'KeyH' || e.code === 'KeyL') {
                 e.preventDefault(); e.stopPropagation()
                 const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
                 const total = iframeRefs.current.filter(Boolean).length
                 if (total === 0) return
-                const delta = isNextKey ? 1 : -1
+                const delta = e.code === 'KeyL' ? 1 : -1
                 const next = ((myIdx < 0 ? 0 : myIdx) + delta + total) % total
                 actionsRef.current.focusIframe(next + 1)
                 return
             }
             if (e.code === 'KeyJ' || e.code === 'KeyK') {
                 e.preventDefault(); e.stopPropagation()
-                const doc = win.document
-                const scroller = (doc.querySelector('.app-scroll-y') as HTMLElement | null) ?? doc.scrollingElement
-                scroller?.scrollBy({ top: e.code === 'KeyJ' ? 60 : -60, behavior: 'auto' })
-                return
-            }
-            if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
-                e.preventDefault(); e.stopPropagation()
-                const doc = win.document
-                const scroller = (doc.querySelector('.app-scroll-y') as HTMLElement | null) ?? doc.scrollingElement
-                const half = (scroller && 'clientHeight' in scroller ? (scroller as HTMLElement).clientHeight : win.innerHeight) / 2
-                scroller?.scrollBy({ top: e.code === 'BracketRight' ? half : -half, behavior: 'auto' })
+                const scroller = findChatScroller(win.document)
+                if (!scroller) return
+                const half = scroller.clientHeight / 2
+                scroller.scrollBy({ top: e.code === 'KeyJ' ? half : -half, behavior: 'auto' })
                 return
             }
             if (e.code === 'Semicolon') {
@@ -373,11 +363,12 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             const next = ((cur + delta) % total + total) % total
             actionsRef.current.focusIframe(next + 1)
         },
-        onScrollLine: (delta) => scrollFocusedIframe(delta),
         onScrollHalfPage: (dir) => {
             const iframe = iframeRefs.current[focusedIdx ?? 0]
-            const half = (iframe?.clientHeight ?? 600) / 2
-            scrollFocusedIframe(dir === 'down' ? half : -half)
+            const scroller = findChatScroller(iframe?.contentDocument)
+            if (!scroller) return
+            const half = scroller.clientHeight / 2
+            scroller.scrollBy({ top: dir === 'down' ? half : -half, behavior: 'auto' })
         },
         onOpenSearch: () => actionsRef.current.openAddModal(),
         onReplaceCell: () => actionsRef.current.openReplaceModal(),
@@ -409,16 +400,24 @@ export function GridView({ sessions, baseUrl, token }: Props) {
 
     const iframeUrl = (sessionId: string) => `/sessions/${sessionId}`
 
-    // Scroll the focused cell's chat viewport. The HappyThread message list
-    // lives in a `.app-scroll-y` div inside the iframe document; fall back
-    // to the iframe document's scrollingElement if that selector misses.
-    function scrollFocusedIframe(delta: number): void {
-        const iframe = iframeRefs.current[focusedIdx ?? 0]
-        const doc = iframe?.contentDocument
-        if (!doc) return
-        const scroller = (doc.querySelector('.app-scroll-y') as HTMLElement | null) ?? doc.scrollingElement
-        scroller?.scrollBy({ top: delta, behavior: 'auto' })
+    // Find the chat-viewport scroll container in an iframe document. The page
+    // has several `.app-scroll-y` divs (sidebar, files panel, settings, etc.)
+    // and only the chat thread one actually has overflowing content. Pick the
+    // one with the largest scrollable overhang; that's reliably the chat.
+    function findChatScroller(doc: Document | null | undefined): HTMLElement | null {
+        if (!doc) return null
+        const candidates = Array.from(doc.querySelectorAll<HTMLElement>('.app-scroll-y'))
+        let best: HTMLElement | null = null
+        let bestOverhang = 0
+        for (const el of candidates) {
+            const overhang = el.scrollHeight - el.clientHeight
+            if (overhang > bestOverhang) { bestOverhang = overhang; best = el }
+        }
+        if (best) return best
+        // Fall back to whatever the document considers its primary scroller.
+        return (doc.scrollingElement as HTMLElement | null) ?? doc.body ?? null
     }
+
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--app-bg)', position: 'relative' }}>
