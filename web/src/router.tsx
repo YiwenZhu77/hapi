@@ -15,6 +15,8 @@ import { getScrollRestorationKey } from '@/lib/scrollRestorationKey'
 import { App } from '@/App'
 import { SessionChat } from '@/components/SessionChat'
 import { SessionList } from '@/components/SessionList'
+import { GridView } from '@/components/GridView'
+import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard'
 import { NewSession } from '@/components/NewSession'
 import { WorkspaceBrowser } from '@/components/WorkspaceBrowser'
 import { LoadingState } from '@/components/LoadingState'
@@ -132,6 +134,13 @@ function SessionsPage() {
     const { t } = useTranslation()
     const { sessions, isLoading, error, refetch } = useSessions(api)
     const { machines } = useMachines(api, true)
+
+    // Register global keyboard shortcuts: Alt/Cmd+; (grid), Alt/Cmd+'
+    // (strip), Alt/Cmd+H/L (cycle sessions), Alt/Cmd+1-9 (jump to
+    // session), Alt/Cmd+P (palette), Alt/Cmd+Shift+N (new session).
+    // The hook attaches a window-level keydown listener; without this
+    // call site, none of those shortcuts fire on the sessions pages.
+    useGlobalKeyboard(sessions)
 
     const handleRefresh = useCallback(() => {
         void refetch()
@@ -690,6 +699,18 @@ const settingsRoute = createRoute({
     component: SettingsPage,
 })
 
+function GridPage() {
+    const { api, token, baseUrl } = useAppContext()
+    const { sessions } = useSessions(api)
+    return <GridView sessions={sessions} baseUrl={baseUrl} token={token} />
+}
+
+const gridRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/grid',
+    component: GridPage,
+})
+
 export const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionsRoute.addChildren([
@@ -703,6 +724,7 @@ export const routeTree = rootRoute.addChildren([
     ]),
     browseRoute,
     settingsRoute,
+    gridRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']
