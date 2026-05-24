@@ -12,7 +12,8 @@ import type { SlashCommandsResponse } from '@hapi/protocol/apiTypes'
 import type { AgentFlavor, CodexCollaborationMode, DecryptedMessage, PermissionMode, Session, SyncEvent } from '@hapi/protocol/types'
 import { unwrapRoleWrappedRecordEnvelope } from '@hapi/protocol/messages'
 import type { Server } from 'socket.io'
-import type { Store, CancelQueuedMessageResult } from '../store'
+import type { Store, CancelQueuedMessageResult, StoredSession } from '../store'
+import type { BranchSessionOptions } from '../store/sessionBranch'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { SSEManager } from '../sse/sseManager'
 import { EventPublisher, type SyncEventListener } from './eventPublisher'
@@ -343,6 +344,14 @@ export class SyncEngine {
 
     getOrCreateMachine(id: string, metadata: unknown, runnerState: unknown, namespace: string): Machine {
         return this.machineCache.getOrCreateMachine(id, metadata, runnerState, namespace)
+    }
+
+    branchSession(opts: BranchSessionOptions): StoredSession {
+        // Create the child session row in the DB
+        const child = this.store.sessions.branchSession(opts)
+        // Load the new session into the in-memory cache and emit session-added SSE
+        this.sessionCache.refreshSession(child.id)
+        return child
     }
 
     async sendMessage(

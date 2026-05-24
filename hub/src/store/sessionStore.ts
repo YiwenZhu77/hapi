@@ -17,6 +17,7 @@ import {
     updateSessionAgentState,
     updateSessionMetadata
 } from './sessions'
+import { branchSession, type BranchSessionOptions } from './sessionBranch'
 
 export class SessionStore {
     private readonly db: Database
@@ -103,5 +104,9 @@ export class SessionStore {
 
     deleteSession(id: string, namespace: string): boolean {
         return deleteSession(this.db, id, namespace)
+    }
+
+    branchSession(opts: BranchSessionOptions): StoredSession {
+        return branchSession(this.db, opts)
     }
 }

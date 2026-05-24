@@ -610,5 +610,37 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
     })
 
+    app.post('/sessions/:id/branch', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const parentId = c.req.param('id')
+
+        // Verify parent exists and is accessible in this namespace
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const body = await c.req.json().catch(() => null)
+        if (!body || typeof body.branchedFromSeq !== 'number') {
+            return c.json({ error: 'branchedFromSeq required (number)' }, 400)
+        }
+
+        try {
+            const child = engine.branchSession({
+                parentSessionId: parentId,
+                branchedFromSeq: body.branchedFromSeq,
+                newName: typeof body.newName === 'string' ? body.newName : undefined
+            })
+            return c.json(child, 201)
+        } catch (e: unknown) {
+            const msg = String((e as Error)?.message ?? e)
+            return c.json({ error: msg }, 500)
+        }
+    })
+
     return app
 }

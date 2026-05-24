@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { Hono } from 'hono'
 import type { Session, SyncEngine } from '../../sync/syncEngine'
+import type { StoredSession } from '../../store/types'
 import type { WebAppEnv } from '../middleware/auth'
 import { createSessionsRoutes } from './sessions'
 
@@ -524,4 +525,151 @@ describe('sessions routes', () => {
         })
     })
 
+})
+
+// ---------------------------------------------------------------------------
+// POST /sessions/:id/branch
+// ---------------------------------------------------------------------------
+
+function makeChildSession(parentId: string, branchedFromSeq: number, name?: string): StoredSession {
+    return {
+        id: 'child-session-1',
+        tag: name ?? `branch of ${parentId}`,
+        namespace: 'default',
+        machineId: null,
+        createdAt: 1000,
+        updatedAt: 1000,
+        metadata: null,
+        metadataVersion: 0,
+        agentState: null,
+        agentStateVersion: 0,
+        model: null,
+        modelReasoningEffort: null,
+        effort: null,
+        todos: null,
+        todosUpdatedAt: null,
+        teamState: null,
+        teamStateUpdatedAt: null,
+        active: false,
+        activeAt: null,
+        seq: 0,
+        parentSessionId: parentId,
+        branchedFromSeq
+    }
+}
+
+function createBranchApp(opts: {
+    branchSession?: SyncEngine['branchSession']
+    resolveSessionAccess?: SyncEngine['resolveSessionAccess']
+}) {
+    const session = createSession()
+
+    const resolveSessionAccess = opts.resolveSessionAccess ??
+        (() => ({ ok: true as const, sessionId: session.id, session }))
+
+    const branchSession = opts.branchSession ??
+        (({ parentSessionId, branchedFromSeq, newName }) =>
+            makeChildSession(parentSessionId, branchedFromSeq, newName))
+
+    const engine = {
+        resolveSessionAccess,
+        branchSession,
+        // stubs required by other handlers accessed via createSessionsRoutes
+        applySessionConfig: async () => {},
+        listCodexModelsForSession: async () => ({ success: true, models: [] }),
+        listOpencodeModelsForSession: async () => ({ success: true, availableModels: [], currentModelId: '' }),
+        resumeSession: async () => ({ type: 'success', sessionId: session.id }),
+        listSlashCommands: async () => ({ success: true, commands: [] })
+    } as unknown as SyncEngine
+
+    const app = new Hono<WebAppEnv>()
+    app.use('*', async (c, next) => {
+        c.set('namespace', 'default')
+        await next()
+    })
+    app.route('/api', createSessionsRoutes(() => engine))
+
+    return app
+}
+
+describe('POST /sessions/:id/branch', () => {
+    it('returns 201 with child session on success', async () => {
+        const app = createBranchApp({})
+
+        const response = await app.request('/api/sessions/session-1/branch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ branchedFromSeq: 5 })
+        })
+
+        expect(response.status).toBe(201)
+        const body = await response.json() as StoredSession
+        expect(body.parentSessionId).toBe('session-1')
+        expect(body.branchedFromSeq).toBe(5)
+    })
+
+    it('returns 201 with custom name when newName is provided', async () => {
+        const app = createBranchApp({})
+
+        const response = await app.request('/api/sessions/session-1/branch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ branchedFromSeq: 3, newName: 'my-branch' })
+        })
+
+        expect(response.status).toBe(201)
+        const body = await response.json() as StoredSession
+        expect(body.tag).toBe('my-branch')
+    })
+
+    it('returns 404 when parent session is not found in namespace', async () => {
+        const app = createBranchApp({
+            resolveSessionAccess: () => ({ ok: false as const, reason: 'not-found' as const })
+        })
+
+        const response = await app.request('/api/sessions/unknown-session/branch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ branchedFromSeq: 1 })
+        })
+
+        expect(response.status).toBe(404)
+    })
+
+    it('returns 400 when branchedFromSeq is missing', async () => {
+        const app = createBranchApp({})
+
+        const response = await app.request('/api/sessions/session-1/branch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ newName: 'oops' })
+        })
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toMatchObject({ error: expect.stringContaining('branchedFromSeq') })
+    })
+
+    it('returns 400 when branchedFromSeq is not a number', async () => {
+        const app = createBranchApp({})
+
+        const response = await app.request('/api/sessions/session-1/branch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ branchedFromSeq: 'five' })
+        })
+
+        expect(response.status).toBe(400)
+    })
+
+    it('returns 400 when body is missing', async () => {
+        const app = createBranchApp({})
+
+        const response = await app.request('/api/sessions/session-1/branch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: 'not-json'
+        })
+
+        expect(response.status).toBe(400)
+    })
 })
