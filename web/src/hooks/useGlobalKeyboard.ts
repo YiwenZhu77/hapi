@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
+import { isPrimaryMod, isDigitFocusMod, isScrollKeyMod } from '@/lib/platform'
 
 /** Pixel delta for vim-style J/K line scroll (≈ 2 lines of body text). */
 const LINE_SCROLL_PX = 60
@@ -88,7 +88,9 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
         // <Primary>+; → toggle grid view. <Primary>+' → toggle strip/grid layout.
         // Mac: Cmd; Windows/Linux: Alt.
         const onScrollMod = (e: KeyboardEvent) => {
-            if (!isPrimaryMod(e) || e.shiftKey) return
+            // Accept either Alt or Ctrl on Win/Linux — Alt+letter is widely
+            // intercepted by WMs / PWA shells; Ctrl is the reliable fallback.
+            if (!isScrollKeyMod(e) || e.shiftKey) return
             if (e.code === 'KeyH' || e.code === 'KeyL') {
                 const delta = e.code === 'KeyL' ? 1 : -1
                 e.preventDefault()

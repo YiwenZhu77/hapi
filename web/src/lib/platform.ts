@@ -46,3 +46,16 @@ export function isDigitFocusMod(e: KeyboardEvent): boolean {
 
 // Backwards-compat alias for earlier code that used isScrollMod.
 export const isScrollMod = isPrimaryMod
+
+/** Same widening as `isDigitFocusMod` but for the letter / bracket keys used
+ *  in scroll + cell-cycle shortcuts. Alt+letter on Linux gets intercepted by
+ *  many WMs (GNOME / KDE / i3 workspace switches, dead-key composing) and on
+ *  Windows by Chrome PWA accelerator layer. Ctrl+letter is the fallback. */
+export function isScrollKeyMod(e: KeyboardEvent): boolean {
+    if (isMac) {
+        return e.metaKey && !e.altKey && !e.ctrlKey
+    }
+    const altOnly = e.altKey && !e.ctrlKey && !e.metaKey
+    const ctrlOnly = e.ctrlKey && !e.altKey && !e.metaKey
+    return altOnly || ctrlOnly
+}

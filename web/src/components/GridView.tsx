@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard'
 import { SessionSearchModal } from '@/components/SessionSearchModal'
-import { KBD, isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
+import { KBD, isPrimaryMod, isDigitFocusMod, isScrollKeyMod } from '@/lib/platform'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { NewSessionModal } from '@/components/NewSessionModal'
 import { useAppContext } from '@/lib/app-context'
@@ -315,7 +315,8 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         // ' toggle strip/grid (kept here to share key/scope behavior with the
         // main handler).
         const scrollModHandler = (e: KeyboardEvent) => {
-            if (!isPrimaryMod(e) || e.shiftKey) return
+            // Accept Alt OR Ctrl on Win/Linux — Alt+letter often hijacked by WM.
+            if (!isScrollKeyMod(e) || e.shiftKey) return
             const isPrevKey = e.code === 'KeyH' || e.code === 'BracketLeft'
             const isNextKey = e.code === 'KeyL' || e.code === 'BracketRight'
             if (isPrevKey || isNextKey) {
