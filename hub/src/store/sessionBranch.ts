@@ -57,7 +57,14 @@ export function branchSession(
         if (parent.tag && parent.tag.trim()) return parent.tag
         return parentSessionId.slice(0, 8)
     })()
-    const childTag = newName ?? `${parentDisplayName}_branched`
+    // Sequential numbering: parent is implicitly _1, first branch is _2, etc.
+    // Counts only branches actually descended from this parent (parent_session_id
+    // match) so renaming or unrelated tags with similar suffixes don't bump the
+    // number unexpectedly.
+    const existingBranchCount = (db.prepare(
+        'SELECT COUNT(*) AS n FROM sessions WHERE parent_session_id = ?'
+    ).get(parentSessionId) as { n: number } | undefined)?.n ?? 0
+    const childTag = newName ?? `${parentDisplayName}_${existingBranchCount + 2}`
 
     // Strip agent-session-id fields from copied metadata. The branched session is a
     // new conversation; the hub's deduplicateByAgentSessionId treats sessions sharing
