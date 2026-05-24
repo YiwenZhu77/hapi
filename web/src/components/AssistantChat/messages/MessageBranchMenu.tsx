@@ -3,6 +3,7 @@ import { useHappyChatContext } from '@/components/AssistantChat/context'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useToast } from '@/lib/toast-context'
 import { queryKeys } from '@/lib/query-keys'
+import { addSessionToGrid } from '@/hooks/useGridPinned'
 import type { BranchedSession } from '@/api/client'
 
 /**
@@ -42,6 +43,11 @@ export function MessageBranchMenu(props: {
             queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
             queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) })
             haptic.notification('success')
+            // Task 3.6: branched session auto-fills a grid slot. When the grid
+            // is full, the least-recently-viewed pinned cell is evicted.
+            // Storage write is cross-route — GridView (on /grid) picks it up
+            // via the GRID_UPDATE_EVENT / 'storage' listeners in useGridPinned.
+            try { addSessionToGrid(child.id) } catch { /* localStorage disabled — non-fatal */ }
             props.onBranched?.(child.id)
         },
         onError: (error) => {

@@ -8,6 +8,7 @@ import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { NewSessionModal } from '@/components/NewSessionModal'
 import { useAppContext } from '@/lib/app-context'
 import { queryKeys } from '@/lib/query-keys'
+import { useGridPinned, noteCellViewed, MAX_PINNED_CELLS } from '@/hooks/useGridPinned'
 import type { SessionSummary } from '@/types/api'
 
 function getSessionTitle(session: SessionSummary): string {
@@ -62,27 +63,13 @@ export function GridView({ sessions, baseUrl, token }: Props) {
     const navigate = useNavigate()
     const { api } = useAppContext()
     const queryClient = useQueryClient()
-    // Persist grid layout across navigation. Stored as plain string[] (pin order).
-    // stripMode persisted separately. Both fall back gracefully when storage is unavailable.
-    const PINNED_KEY = 'hapi.grid.pinnedIds'
+    // Persist grid layout across navigation. pinnedIds + lastViewed live in
+    // localStorage via useGridPinned so other routes (e.g. MessageBranchMenu
+    // calling addSessionToGrid) can stage cells before the user navigates here.
+    // stripMode is persisted separately below.
     const STRIP_KEY = 'hapi.grid.stripMode'
-    const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
-        try {
-            const raw = localStorage.getItem(PINNED_KEY)
-            if (!raw) return []
-            const parsed = JSON.parse(raw)
-            return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : []
-        } catch { return [] }
-    })
+    const [pinnedIds, setPinnedIds] = useGridPinned()
     const initializedPinnedRef = useRef(false)
-
-    // Persist pinnedIds on every change (after init). Filter against current
-    // sessions so stale ids (deleted/archived) don't pollute storage forever.
-    useEffect(() => {
-        try {
-            localStorage.setItem(PINNED_KEY, JSON.stringify(pinnedIds))
-        } catch { /* storage full / disabled — ignore */ }
-    }, [pinnedIds])
 
     // First-time fallback: if storage was empty AND we now have sessions,
     // seed with the 4 most-recent active sessions.
@@ -100,6 +87,14 @@ export function GridView({ sessions, baseUrl, token }: Props) {
     }, [sessions, pinnedIds])
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [focusedIdx, setFocusedIdx] = useState<number | null>(null)
+    // Track LRU for grid eviction: whenever a cell becomes focused, stamp its
+    // sessionId in localStorage so addSessionToGrid (called from other routes)
+    // knows which cell is the staleist to replace when the grid is full.
+    useEffect(() => {
+        if (focusedIdx === null) return
+        const id = pinnedIds[focusedIdx]
+        if (id) noteCellViewed(id)
+    }, [focusedIdx, pinnedIds])
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isNewSessionOpen, setIsNewSessionOpen] = useState(false)
     const [isReplaceOpen, setIsReplaceOpen] = useState(false)
@@ -244,8 +239,8 @@ export function GridView({ sessions, baseUrl, token }: Props) {
     // ────────────────────────────────────────────────────────────────────────
 
     const addSession = useCallback((id: string) => {
-        setPinnedIds(prev => prev.includes(id) ? prev : [...prev.slice(-5), id])
-    }, [])
+        setPinnedIds(prev => prev.includes(id) ? prev : [...prev.slice(-(MAX_PINNED_CELLS - 1)), id])
+    }, [setPinnedIds])
 
     const removeSession = useCallback((id: string) => {
         setPinnedIds(prev => prev.filter(p => p !== id))
@@ -393,7 +388,7 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                     {KBD.primary}; back · {KBD.primary}P add · {KBD.shift}{KBD.primary}F replace · {KBD.primary}X close · {KBD.primary}1-{Math.min(pinned.length || 9, 9)} focus · {KBD.primary}HL cycle · {KBD.primary}JK scroll · {KBD.primary}' {stripMode ? 'grid' : 'strip'}
                 </span>
 
-                {pinnedIds.length < 6 && (
+                {pinnedIds.length < MAX_PINNED_CELLS && (
                     <select
                         onChange={e => {
                             const v = e.target.value

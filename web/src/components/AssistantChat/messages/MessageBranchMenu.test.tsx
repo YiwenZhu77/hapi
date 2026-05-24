@@ -6,6 +6,7 @@ import { MessageBranchMenu } from './MessageBranchMenu'
 import { HappyChatProvider, type HappyChatContextValue } from '@/components/AssistantChat/context'
 import { ToastProvider } from '@/lib/toast-context'
 import type { ApiClient, BranchedSession } from '@/api/client'
+import { readPinnedIds, writePinnedIds, MAX_PINNED_CELLS } from '@/hooks/useGridPinned'
 
 vi.mock('@/hooks/usePlatform', () => ({
     usePlatform: () => ({
@@ -73,6 +74,7 @@ function renderMenu(api: ApiClient, props: {
 describe('MessageBranchMenu', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        localStorage.clear()
     })
 
     afterEach(() => {
@@ -138,6 +140,42 @@ describe('MessageBranchMenu', () => {
         })
         await waitFor(() => {
             expect(onBranched).toHaveBeenCalledWith('child-1')
+        })
+    })
+
+    it('adds the new child session to the grid on successful branch', async () => {
+        const child = makeChild({ id: 'child-new' })
+        const branchSession = vi.fn().mockResolvedValue(child)
+        const api = { branchSession } as unknown as ApiClient
+
+        renderMenu(api)
+
+        const button = screen.getByRole('button', { name: 'Branch from this message' })
+        fireEvent.click(button)
+
+        await waitFor(() => {
+            expect(branchSession).toHaveBeenCalled()
+        })
+        await waitFor(() => {
+            expect(readPinnedIds()).toContain('child-new')
+        })
+    })
+
+    it('evicts an existing pinned cell when the grid is full', async () => {
+        const filler = Array.from({ length: MAX_PINNED_CELLS }, (_, i) => `s${i}`)
+        writePinnedIds(filler)
+        const child = makeChild({ id: 'child-evict' })
+        const branchSession = vi.fn().mockResolvedValue(child)
+        const api = { branchSession } as unknown as ApiClient
+
+        renderMenu(api)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Branch from this message' }))
+
+        await waitFor(() => {
+            const ids = readPinnedIds()
+            expect(ids).toContain('child-evict')
+            expect(ids).toHaveLength(MAX_PINNED_CELLS)
         })
     })
 
