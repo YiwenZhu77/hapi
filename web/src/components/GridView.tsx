@@ -330,8 +330,17 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             }
             if (e.code === 'KeyJ' || e.code === 'KeyK') {
                 e.preventDefault(); e.stopPropagation()
-                const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
-                actionsRef.current.moveFocus(e.code === 'KeyJ' ? 'j' : 'k', myIdx)
+                const doc = win.document
+                const scroller = (doc.querySelector('.app-scroll-y') as HTMLElement | null) ?? doc.scrollingElement
+                scroller?.scrollBy({ top: e.code === 'KeyJ' ? 60 : -60, behavior: 'auto' })
+                return
+            }
+            if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+                e.preventDefault(); e.stopPropagation()
+                const doc = win.document
+                const scroller = (doc.querySelector('.app-scroll-y') as HTMLElement | null) ?? doc.scrollingElement
+                const half = (scroller && 'clientHeight' in scroller ? (scroller as HTMLElement).clientHeight : win.innerHeight) / 2
+                scroller?.scrollBy({ top: e.code === 'BracketRight' ? half : -half, behavior: 'auto' })
                 return
             }
             if (e.code === 'Semicolon') {
@@ -363,7 +372,12 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             const next = ((cur + delta) % total + total) % total
             actionsRef.current.focusIframe(next + 1)
         },
-        onMoveFocus: (dir) => actionsRef.current.moveFocus(dir),
+        onScrollLine: (delta) => scrollFocusedIframe(delta),
+        onScrollHalfPage: (dir) => {
+            const iframe = iframeRefs.current[focusedIdx ?? 0]
+            const half = (iframe?.clientHeight ?? 600) / 2
+            scrollFocusedIframe(dir === 'down' ? half : -half)
+        },
         onOpenSearch: () => actionsRef.current.openAddModal(),
         onReplaceCell: () => actionsRef.current.openReplaceModal(),
         onCloseCell: () => actionsRef.current.closeCell(),
@@ -393,6 +407,17 @@ export function GridView({ sessions, baseUrl, token }: Props) {
     const getColSpan = (i: number) => isFiveLayout ? (i < 3 ? 2 : 3) : 1
 
     const iframeUrl = (sessionId: string) => `/sessions/${sessionId}`
+
+    // Scroll the focused cell's chat viewport. The HappyThread message list
+    // lives in a `.app-scroll-y` div inside the iframe document; fall back
+    // to the iframe document's scrollingElement if that selector misses.
+    function scrollFocusedIframe(delta: number): void {
+        const iframe = iframeRefs.current[focusedIdx ?? 0]
+        const doc = iframe?.contentDocument
+        if (!doc) return
+        const scroller = (doc.querySelector('.app-scroll-y') as HTMLElement | null) ?? doc.scrollingElement
+        scroller?.scrollBy({ top: delta, behavior: 'auto' })
+    }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--app-bg)', position: 'relative' }}>

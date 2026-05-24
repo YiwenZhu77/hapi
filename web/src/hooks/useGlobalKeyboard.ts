@@ -2,13 +2,18 @@ import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
 
+/** Pixel delta for vim-style J/K line scroll (≈ 2 lines of body text). */
+const LINE_SCROLL_PX = 60
+
 type Options = {
     // Grid mode: <Primary>+1-9 focus nth pinned cell instead of navigating
     onSelectIndex?: (n: number) => void
-    // Grid mode: <Primary>+H/L (and <Primary>+[ / <Primary>+]) cycle prev/next pinned cell
+    // Grid mode: <Primary>+H/L cycle prev/next pinned cell
     onCyclePinned?: (delta: -1 | 1) => void
-    // Grid mode: <Primary>+J/K — 2D vertical motion across the grid
-    onMoveFocus?: (dir: 'j' | 'k') => void
+    // Grid mode: <Primary>+J/K scroll focused cell's chat content by line
+    onScrollLine?: (delta: number) => void
+    // Grid mode: <Primary>+[ / <Primary>+] scroll focused cell by half page
+    onScrollHalfPage?: (dir: 'up' | 'down') => void
     // <Primary>+P: open search palette (add session to grid, or navigate)
     onOpenSearch?: () => void
     // <Primary>+F: replace currently focused grid cell
@@ -84,12 +89,8 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
         // Mac: Cmd; Windows/Linux: Alt.
         const onScrollMod = (e: KeyboardEvent) => {
             if (!isPrimaryMod(e) || e.shiftKey) return
-            // H/L and [/] both cycle prev/next pinned cell (grid) or session (non-grid).
-            // [/] is the ergonomic alias.
-            const isPrevKey = e.code === 'KeyH' || e.code === 'BracketLeft'
-            const isNextKey = e.code === 'KeyL' || e.code === 'BracketRight'
-            if (isPrevKey || isNextKey) {
-                const delta = isNextKey ? 1 : -1
+            if (e.code === 'KeyH' || e.code === 'KeyL') {
+                const delta = e.code === 'KeyL' ? 1 : -1
                 e.preventDefault()
                 if (options.onCyclePinned) {
                     options.onCyclePinned(delta)
@@ -105,12 +106,19 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
                 if (next) navigate({ to: '/sessions/$sessionId', params: { sessionId: next.id } })
                 return
             }
-            // J/K: 2D vertical motion in grid only. Outside grid we silently ignore
-            // so the keys remain available for browser/site defaults.
+            // J/K scroll the focused cell's chat content by line (grid only).
+            // Outside grid: ignore so the keys remain free.
             if (e.code === 'KeyJ' || e.code === 'KeyK') {
-                if (!options.onMoveFocus) return
+                if (!options.onScrollLine) return
                 e.preventDefault()
-                options.onMoveFocus(e.code === 'KeyJ' ? 'j' : 'k')
+                options.onScrollLine(e.code === 'KeyJ' ? LINE_SCROLL_PX : -LINE_SCROLL_PX)
+                return
+            }
+            // [/] scroll the focused cell by half a viewport.
+            if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+                if (!options.onScrollHalfPage) return
+                e.preventDefault()
+                options.onScrollHalfPage(e.code === 'BracketRight' ? 'down' : 'up')
                 return
             }
             if (e.code === 'Semicolon') {
@@ -130,5 +138,5 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
             window.removeEventListener('keydown', onKeyDown, true)
             window.removeEventListener('keydown', onScrollMod, true)
         }
-    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onMoveFocus, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onToggleStrip])
+    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onScrollLine, options.onScrollHalfPage, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onToggleStrip])
 }
