@@ -628,6 +628,9 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         if (!body || typeof body.branchedFromSeq !== 'number') {
             return c.json({ error: 'branchedFromSeq required (number)' }, 400)
         }
+        if (!Number.isInteger(body.branchedFromSeq) || body.branchedFromSeq < 0) {
+            return c.json({ error: 'branchedFromSeq must be a non-negative integer' }, 400)
+        }
 
         try {
             const child = engine.branchSession({
@@ -638,6 +641,9 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json(child, 201)
         } catch (e: unknown) {
             const msg = String((e as Error)?.message ?? e)
+            if (msg.includes('not found')) {
+                return c.json({ error: msg }, 404)
+            }
             return c.json({ error: msg }, 500)
         }
     })
