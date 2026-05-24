@@ -47,10 +47,22 @@ export function branchSession(
     const childId = randomUUID()
     const childTag = newName ?? `branch of ${parent.tag ?? parentSessionId}`
 
-    // Encode parent metadata + agent_state as JSON strings for insert
-    const metadataJson = parent.metadata !== null && parent.metadata !== undefined
-        ? JSON.stringify(parent.metadata)
-        : null
+    // Strip agent-session-id fields from copied metadata. The branched session is a
+    // new conversation; the hub's deduplicateByAgentSessionId treats sessions sharing
+    // a claudeSessionId / codexSessionId / etc. as duplicates and merges them — which
+    // would delete the new branch. The agent-session-ids will be re-assigned when the
+    // branch is resumed/started for the first time.
+    const metadataJson = (() => {
+        if (parent.metadata === null || parent.metadata === undefined) return null
+        if (typeof parent.metadata !== 'object') return JSON.stringify(parent.metadata)
+        const stripped = { ...(parent.metadata as Record<string, unknown>) }
+        delete stripped.claudeSessionId
+        delete stripped.codexSessionId
+        delete stripped.geminiSessionId
+        delete stripped.opencodeSessionId
+        delete stripped.cursorSessionId
+        return JSON.stringify(stripped)
+    })()
     const agentStateJson = parent.agentState !== null && parent.agentState !== undefined
         ? JSON.stringify(parent.agentState)
         : null
