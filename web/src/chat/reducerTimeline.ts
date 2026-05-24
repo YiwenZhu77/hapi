@@ -649,7 +649,8 @@ export function reduceTimeline(
                     invokedAt: msg.invokedAt,
                     text: msg.content.text,
                     source: 'user',
-                    meta: msg.meta
+                    meta: msg.meta,
+                    seq: msg.seq
                 }))
                 continue
             }
@@ -663,7 +664,8 @@ export function reduceTimeline(
                 attachments: msg.content.attachments,
                 status: msg.status,
                 originalText: msg.originalText,
-                meta: msg.meta
+                meta: msg.meta,
+                seq: msg.seq
             })
             continue
         }
@@ -720,7 +722,8 @@ export function reduceTimeline(
                             model: msg.model,
                             text: c.text,
                             source: 'assistant',
-                            meta: msg.meta
+                            meta: msg.meta,
+                            seq: msg.seq
                         }))
                         continue
                     }
@@ -733,7 +736,8 @@ export function reduceTimeline(
                         usage: msg.usage,
                         model: msg.model,
                         text: c.text,
-                        meta: msg.meta
+                        meta: msg.meta,
+                        seq: msg.seq
                     })
                     continue
                 }
@@ -748,7 +752,8 @@ export function reduceTimeline(
                         imageId: c.imageId,
                         fileName: c.fileName,
                         mimeType: c.mimeType,
-                        meta: msg.meta
+                        meta: msg.meta,
+                        seq: msg.seq
                     })
                     continue
                 }
@@ -763,6 +768,13 @@ export function reduceTimeline(
                             existing.model = msg.model
                             existing.meta = msg.meta
                             existing.invokedAt = msg.invokedAt
+                            // MIN seq across snapshot updates so branch-from-here
+                            // addresses the earliest reasoning chunk.
+                            if (msg.seq !== undefined) {
+                                existing.seq = existing.seq === undefined
+                                    ? msg.seq
+                                    : Math.min(existing.seq, msg.seq)
+                            }
                             continue
                         }
                     }
@@ -776,7 +788,8 @@ export function reduceTimeline(
                         usage: msg.usage,
                         model: msg.model,
                         text: c.text,
-                        meta: msg.meta
+                        meta: msg.meta,
+                        seq: msg.seq
                     }
                     blocks.push(block)
                     if (streamId) {
@@ -795,7 +808,8 @@ export function reduceTimeline(
                         usage: msg.usage,
                         model: msg.model,
                         review: c.review,
-                        meta: msg.meta
+                        meta: msg.meta,
+                        seq: msg.seq
                     })
                     continue
                 }
@@ -843,7 +857,8 @@ export function reduceTimeline(
                         name: c.name,
                         input: c.input,
                         description: c.description,
-                        permission
+                        permission,
+                        seq: msg.seq
                     })
 
                     if (block.tool.state === 'pending') {
@@ -912,7 +927,8 @@ export function reduceTimeline(
                         name: permissionEntry?.toolName ?? 'Tool',
                         input: permissionEntry?.input ?? null,
                         description: null,
-                        permission
+                        permission,
+                        seq: msg.seq
                     })
 
                     block.tool = {

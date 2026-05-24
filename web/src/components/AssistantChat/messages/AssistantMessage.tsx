@@ -12,6 +12,7 @@ import { getConversationMessageAnchorId } from '@/chat/outline'
 import { MessageMetadata } from '@/components/AssistantChat/messages/MessageMetadata'
 import { CodexReviewCard } from '@/components/AssistantChat/messages/CodexReviewCard'
 import { MessageTimestamp } from '@/components/AssistantChat/messages/MessageTimestamp'
+import { MessageBranchMenu } from '@/components/AssistantChat/messages/MessageBranchMenu'
 
 const TOOL_COMPONENTS = {
     Fallback: HappyToolMessage
@@ -27,6 +28,7 @@ const MESSAGE_PART_COMPONENTS = {
 export function HappyAssistantMessage() {
     const { copied, copy } = useCopyToClipboard()
     const [showMetadata, setShowMetadata] = useState(false)
+    const messageSeq = useAssistantState(({ message }) => (message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined)?.seq)
     const messageId = useAssistantState(({ message }) => message.id)
     const isCliOutput = useAssistantState(({ message }) => {
         const custom = message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined
@@ -76,6 +78,9 @@ export function HappyAssistantMessage() {
                 <CliOutputBlock text={cliText} />
                 <div className="mt-1 flex items-center gap-2">
                     <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
+                    {typeof messageSeq === 'number' && (
+                        <MessageBranchMenu messageSeq={messageSeq} />
+                    )}
                     {hasMetadata && (
                         <button
                             type="button"
@@ -111,6 +116,9 @@ export function HappyAssistantMessage() {
                         <CodexReviewCard review={codexReview} />
                         <div className="mt-1 flex items-center gap-2">
                             <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
+                            {typeof messageSeq === 'number' && (
+                                <MessageBranchMenu messageSeq={messageSeq} />
+                            )}
                             {hasMetadata && (
                                 <button
                                     type="button"
@@ -161,6 +169,9 @@ export function HappyAssistantMessage() {
                     <MessagePrimitive.Content components={MESSAGE_PART_COMPONENTS} />
                     <div className="mt-1 flex items-center gap-2">
                         <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
+                        {typeof messageSeq === 'number' && (
+                            <MessageBranchMenu messageSeq={messageSeq} />
+                        )}
                         {hasMetadata && (
                             <button
                                 type="button"
@@ -196,6 +207,9 @@ export function HappyAssistantMessage() {
                     <MessagePrimitive.Content components={MESSAGE_PART_COMPONENTS} />
                     <div className="mt-1 flex items-center gap-2">
                         <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
+                        {typeof messageSeq === 'number' && (
+                            <MessageBranchMenu messageSeq={messageSeq} />
+                        )}
                         {hasMetadata && (
                             <button
                                 type="button"

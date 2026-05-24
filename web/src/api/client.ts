@@ -30,6 +30,27 @@ import type {
 import type { AgentFlavor } from '@hapi/protocol'
 import type { CancelMessageResponse } from '@hapi/protocol/schemas'
 
+/**
+ * Subset of hub `StoredSession` returned by POST /api/sessions/:id/branch.
+ * StoredSession isn't exported from `@hapi/protocol`, so we shape the
+ * fields callers actually use here. The hub returns the full record but
+ * extra fields are harmless.
+ *
+ * The branch route always populates `parentSessionId` and `branchedFromSeq`
+ * (those are the route's whole purpose), and `namespace`/`createdAt`/
+ * `updatedAt` are non-null on every `StoredSession`, so they're required
+ * here even though `StoredSession.branchedFromSeq` allows null in general.
+ */
+export type BranchedSession = {
+    id: string
+    tag: string | null
+    parentSessionId: string
+    branchedFromSeq: number
+    namespace: string
+    createdAt: number
+    updatedAt: number
+}
+
 type ApiClientOptions = {
     baseUrl?: string
     getToken?: () => string | null
@@ -517,6 +538,28 @@ export class ApiClient {
             method: 'PATCH',
             body: JSON.stringify({ name })
         })
+    }
+
+    /**
+     * Branch a session at a specific seq, creating a child session whose
+     * history is a copy of the parent up to and including `branchedFromSeq`.
+     * Returns the new child session (StoredSession shape from hub).
+     */
+    async branchSession(
+        sessionId: string,
+        branchedFromSeq: number,
+        newName?: string
+    ): Promise<BranchedSession> {
+        return await this.request<BranchedSession>(
+            `/api/sessions/${encodeURIComponent(sessionId)}/branch`,
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    branchedFromSeq,
+                    ...(newName ? { newName } : {})
+                })
+            }
+        )
     }
 
     async deleteSession(sessionId: string): Promise<void> {

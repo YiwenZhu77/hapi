@@ -66,6 +66,7 @@ export function ensureToolBlock(
         input: unknown
         description: string | null
         permission?: ToolPermission
+        seq?: number
     }
 ): ToolCallBlock {
     const existing = toolBlocksById.get(id)
@@ -114,6 +115,13 @@ export function ensureToolBlock(
         if (seed.model !== undefined) {
             existing.model = seed.model
         }
+        // Branch-from-here addresses the earliest contributing message, so
+        // take the MIN seq across the tool-use and tool-result messages.
+        if (seed.seq !== undefined) {
+            existing.seq = existing.seq === undefined
+                ? seed.seq
+                : Math.min(existing.seq, seed.seq)
+        }
         return existing
     }
 
@@ -146,7 +154,8 @@ export function ensureToolBlock(
         model: seed.model,
         tool,
         children: [],
-        meta: seed.meta
+        meta: seed.meta,
+        seq: seed.seq
     }
 
     toolBlocksById.set(id, block)

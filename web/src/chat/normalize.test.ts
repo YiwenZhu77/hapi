@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { normalizeDecryptedMessage } from './normalize'
 import type { DecryptedMessage } from '@/types/api'
 
-function makeMessage(content: unknown): DecryptedMessage {
+function makeMessage(content: unknown, seq: number | null = 1): DecryptedMessage {
     return {
         id: 'msg-1',
-        seq: 1,
+        seq,
         localId: null,
         content,
         createdAt: 1_742_372_800_000
@@ -662,6 +662,43 @@ describe('normalizeDecryptedMessage', () => {
                 preTokens: 1234
             }
         })
+    })
+
+    it('propagates DecryptedMessage.seq through to NormalizedMessage.seq (agent)', () => {
+        const message = makeMessage({
+            role: 'agent',
+            content: {
+                type: 'output',
+                data: {
+                    type: 'assistant',
+                    uuid: 'a-seq',
+                    message: { role: 'assistant', content: 'hello' }
+                }
+            }
+        }, 42)
+
+        const normalized = normalizeDecryptedMessage(message)
+        expect(normalized?.seq).toBe(42)
+    })
+
+    it('propagates DecryptedMessage.seq through to NormalizedMessage.seq (user)', () => {
+        const message = makeMessage({
+            role: 'user',
+            content: { type: 'text', text: 'hi' }
+        }, 99)
+
+        const normalized = normalizeDecryptedMessage(message)
+        expect(normalized?.seq).toBe(99)
+    })
+
+    it('leaves seq undefined when DecryptedMessage.seq is null (pending)', () => {
+        const message = makeMessage({
+            role: 'user',
+            content: { type: 'text', text: 'pending' }
+        }, null)
+
+        const normalized = normalizeDecryptedMessage(message)
+        expect(normalized?.seq).toBeUndefined()
     })
 
     it('normalizes Codex agent-run events for timeline aggregation', () => {

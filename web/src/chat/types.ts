@@ -128,6 +128,9 @@ export type NormalizedMessage = ({
     originalText?: string
     invokedAt?: number | null
     model?: string | null
+    /** Server-assigned monotonic sequence number; absent for pending/optimistic
+     *  messages and synthetic blocks with no upstream DecryptedMessage. */
+    seq?: number
 }
 
 export type ToolPermission = {
@@ -167,6 +170,7 @@ export type UserTextBlock = {
     status?: MessageStatus
     originalText?: string
     meta?: unknown
+    seq?: number
 }
 
 export type AgentTextBlock = {
@@ -180,6 +184,7 @@ export type AgentTextBlock = {
     model?: string | null
     text: string
     meta?: unknown
+    seq?: number
 }
 
 export type AgentReasoningBlock = {
@@ -193,6 +198,7 @@ export type AgentReasoningBlock = {
     model?: string | null
     text: string
     meta?: unknown
+    seq?: number
 }
 
 export type CodexReviewBlock = {
@@ -206,6 +212,7 @@ export type CodexReviewBlock = {
     model?: string | null
     review: CodexReview
     meta?: unknown
+    seq?: number
 }
 
 export type CliOutputBlock = {
@@ -220,6 +227,9 @@ export type CliOutputBlock = {
     text: string
     source: 'user' | 'assistant'
     meta?: unknown
+    /** Server seq of the underlying message; for blocks merged from multiple
+     *  source messages (see `mergeCliOutputBlocks`), this is the MIN seq. */
+    seq?: number
 }
 
 export type GeneratedImageBlock = {
@@ -232,6 +242,7 @@ export type GeneratedImageBlock = {
     fileName: string
     mimeType: string | null
     meta?: unknown
+    seq?: number
 }
 
 export type AgentEventBlock = {
@@ -256,6 +267,11 @@ export type ToolCallBlock = {
     tool: ChatToolCall
     children: ChatBlock[]
     meta?: unknown
+    /** Server seq of the message that first introduced this tool-call. For
+     *  tool-call blocks built up from multiple messages (tool-use → tool-result),
+     *  the seq is the MIN across contributing messages so branching from this
+     *  tool card branches at the earliest contributing point. */
+    seq?: number
 }
 
 export type ChatBlock = UserTextBlock | AgentTextBlock | AgentReasoningBlock | CodexReviewBlock | CliOutputBlock | ToolCallBlock | GeneratedImageBlock | AgentEventBlock

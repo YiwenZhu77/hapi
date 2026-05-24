@@ -44,6 +44,13 @@ export type HappyChatMessageMetadata = {
      * per-message footer is rendered unchanged.
      */
     turnCount?: number
+    /**
+     * Server-assigned monotonic seq of the underlying message. Used by
+     * per-message UI actions (e.g. branch-from-here) to address a stable
+     * point in history. Absent for pending/optimistic messages and
+     * synthetic blocks with no upstream DecryptedMessage.
+     */
+    seq?: number
 }
 
 function formatCodexReviewText(review: CodexReview): string {
@@ -291,7 +298,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                     localId: block.localId,
                     originalText: block.originalText,
                     attachments: block.attachments,
-                    invokedAt: block.invokedAt
+                    invokedAt: block.invokedAt,
+                    seq: block.seq
                 } satisfies HappyChatMessageMetadata
             }
         }
@@ -310,7 +318,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                     invokedAt: block.invokedAt,
                     durationMs: block.durationMs,
                     usage: block.usage,
-                    model: block.model
+                    model: block.model,
+                    seq: block.seq
                 } satisfies HappyChatMessageMetadata
             }
         }
@@ -332,7 +341,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                 custom: {
                     kind: 'tool',
                     toolCallId: block.id,
-                    invokedAt: block.invokedAt ?? null
+                    invokedAt: block.invokedAt ?? null,
+                    seq: block.seq
                 } satisfies HappyChatMessageMetadata
             }
         }
@@ -351,7 +361,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                     invokedAt: block.invokedAt,
                     durationMs: block.durationMs,
                     usage: block.usage,
-                    model: block.model
+                    model: block.model,
+                    seq: block.seq
                 } satisfies HappyChatMessageMetadata
             }
         }
@@ -371,7 +382,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                     durationMs: block.durationMs,
                     usage: block.usage,
                     model: block.model,
-                    review: block.review
+                    review: block.review,
+                    seq: block.seq
                 } satisfies HappyChatMessageMetadata
             }
         }
@@ -409,7 +421,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                     invokedAt: block.invokedAt,
                     durationMs: block.durationMs,
                     usage: block.usage,
-                    model: block.model
+                    model: block.model,
+                    seq: block.seq
                 } satisfies HappyChatMessageMetadata
             }
         }
@@ -417,6 +430,13 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
 
     if (block.kind === 'tool-group') {
         const groupBlock: ToolGroupBlock = block
+        // Tool-group is a derived view of multiple tool-call blocks. Branch
+        // from the earliest contributing tool — that's the earliest seq.
+        let groupSeq: number | undefined = undefined
+        for (const tool of groupBlock.tools) {
+            if (tool.seq === undefined) continue
+            groupSeq = groupSeq === undefined ? tool.seq : Math.min(groupSeq, tool.seq)
+        }
         return {
             role: 'assistant',
             id: `tool:${groupBlock.id}`,
@@ -432,7 +452,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                 custom: {
                     kind: 'tool',
                     toolCallId: groupBlock.id,
-                    invokedAt: groupBlock.invokedAt ?? null
+                    invokedAt: groupBlock.invokedAt ?? null,
+                    seq: groupSeq
                 } satisfies HappyChatMessageMetadata
             }
         }
@@ -462,7 +483,8 @@ function toThreadMessageLike(block: VisibleChatBlock): ThreadMessageLike {
                 invokedAt: toolBlock.invokedAt,
                 durationMs: toolBlock.durationMs,
                 usage: toolBlock.usage,
-                model: toolBlock.model
+                model: toolBlock.model,
+                seq: toolBlock.seq
             } satisfies HappyChatMessageMetadata
         }
     }

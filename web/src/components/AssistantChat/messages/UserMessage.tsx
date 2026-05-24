@@ -11,6 +11,7 @@ import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { getConversationMessageAnchorId } from '@/chat/outline'
 import { MessageMetadata } from '@/components/AssistantChat/messages/MessageMetadata'
 import { MessageTimestamp } from '@/components/AssistantChat/messages/MessageTimestamp'
+import { MessageBranchMenu } from '@/components/AssistantChat/messages/MessageBranchMenu'
 
 export function HappyUserMessage() {
     const ctx = useHappyChatContext()
@@ -47,6 +48,7 @@ export function HappyUserMessage() {
         return message.content.find((part) => part.type === 'text')?.text ?? ''
     })
     const invokedAt = useAssistantState(({ message }) => (message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined)?.invokedAt)
+    const messageSeq = useAssistantState(({ message }) => (message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined)?.seq)
 
     const hasMetadata = invokedAt != null
 
@@ -65,6 +67,9 @@ export function HappyUserMessage() {
                     <CliOutputBlock text={cliText} />
                     <div className="mt-1 flex items-center justify-end gap-2">
                         <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
+                        {typeof messageSeq === 'number' && (
+                            <MessageBranchMenu messageSeq={messageSeq} />
+                        )}
                         {hasMetadata && (
                             <button
                                 type="button"
@@ -118,6 +123,9 @@ export function HappyUserMessage() {
                 </div>
                 <div className="flex justify-end items-center gap-2">
                     <MessageTimestamp className="text-[10px] leading-none text-[var(--app-hint)]" />
+                    {typeof messageSeq === 'number' && (
+                        <MessageBranchMenu messageSeq={messageSeq} />
+                    )}
                     {hasMetadata && (
                         <button
                             type="button"

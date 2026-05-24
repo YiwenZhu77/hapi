@@ -1,0 +1,115 @@
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MessageBranchMenu } from './MessageBranchMenu'
+import { HappyChatProvider, type HappyChatContextValue } from '@/components/AssistantChat/context'
+import { ToastProvider } from '@/lib/toast-context'
+import type { ApiClient, BranchedSession } from '@/api/client'
+
+vi.mock('@/hooks/usePlatform', () => ({
+    usePlatform: () => ({
+        haptic: { notification: vi.fn() },
+    }),
+}))
+
+function makeChild(overrides: Partial<BranchedSession> = {}): BranchedSession {
+    return {
+        id: 'child-1',
+        tag: null,
+        parentSessionId: 'parent-1',
+        branchedFromSeq: 42,
+        namespace: 'test',
+        createdAt: 0,
+        updatedAt: 0,
+        ...overrides,
+    }
+}
+
+function makeContext(api: ApiClient, sessionId: string = 'parent-1'): HappyChatContextValue {
+    return {
+        api,
+        sessionId,
+        metadata: null,
+        terminalToolDisplayMode: 'compact',
+        disabled: false,
+        onRefresh: vi.fn(),
+        hasMoreMessages: false,
+        isLoadingMoreMessages: false,
+        loadOlderMessagesPreservingScroll: vi.fn().mockResolvedValue(false),
+    } as HappyChatContextValue
+}
+
+function renderMenu(api: ApiClient, props: { onBranched?: (id: string) => void; sessionId?: string; messageSeq?: number } = {}) {
+    const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+    const sessionId = props.sessionId ?? 'parent-1'
+    function Wrapper({ children }: { children: ReactNode }) {
+        return (
+            <QueryClientProvider client={queryClient}>
+                <ToastProvider>
+                    <HappyChatProvider value={makeContext(api, sessionId)}>{children}</HappyChatProvider>
+                </ToastProvider>
+            </QueryClientProvider>
+        )
+    }
+    return render(
+        <Wrapper>
+            <MessageBranchMenu
+                messageSeq={props.messageSeq ?? 42}
+                onBranched={props.onBranched}
+            />
+        </Wrapper>
+    )
+}
+
+describe('MessageBranchMenu', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+        cleanup()
+    })
+
+    it('calls api.branchSession with sessionId + seq and fires onBranched on success', async () => {
+        const child = makeChild()
+        const branchSession = vi.fn().mockResolvedValue(child)
+        const api = { branchSession } as unknown as ApiClient
+        const onBranched = vi.fn()
+
+        renderMenu(api, { onBranched })
+
+        const button = screen.getByRole('button', { name: 'Branch from this message' })
+        fireEvent.click(button)
+
+        await waitFor(() => {
+            expect(branchSession).toHaveBeenCalledWith('parent-1', 42)
+        })
+        await waitFor(() => {
+            expect(onBranched).toHaveBeenCalledWith('child-1')
+        })
+    })
+
+    it('does not call onBranched when api.branchSession throws and leaves button clickable', async () => {
+        const branchSession = vi.fn().mockRejectedValue(new Error('boom'))
+        const api = { branchSession } as unknown as ApiClient
+        const onBranched = vi.fn()
+
+        renderMenu(api, { onBranched })
+
+        const button = screen.getByRole('button', { name: 'Branch from this message' })
+        fireEvent.click(button)
+
+        await waitFor(() => {
+            expect(branchSession).toHaveBeenCalledTimes(1)
+        })
+
+        // onBranched stays unfired
+        expect(onBranched).not.toHaveBeenCalled()
+
+        // Button is interactive again after the failed mutation settles.
+        await waitFor(() => {
+            expect((button as HTMLButtonElement).disabled).toBe(false)
+        })
+    })
+})

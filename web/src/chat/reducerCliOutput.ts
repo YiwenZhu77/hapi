@@ -36,6 +36,7 @@ export function createCliOutputBlock(props: {
     text: string
     source: CliOutputBlock['source']
     meta?: unknown
+    seq?: number
 }): CliOutputBlock {
     return {
         kind: 'cli-output',
@@ -47,7 +48,8 @@ export function createCliOutputBlock(props: {
         model: props.model,
         text: props.text,
         source: props.source,
-        meta: props.meta
+        meta: props.meta,
+        seq: props.seq
     }
 }
 
@@ -74,13 +76,19 @@ export function mergeCliOutputBlocks(blocks: ChatBlock[]): ChatBlock[] {
             // metadata; the stdout follow-up (`block`) is a synthetic split
             // with no first-class metadata of its own. Always prefer prev's
             // values; fall back to block only if prev is missing one.
+            // Branch-from-here on a merged cli-output should branch at the
+            // earliest contributing message, so take MIN seq across blocks.
+            const mergedSeq = prev.seq !== undefined && block.seq !== undefined
+                ? Math.min(prev.seq, block.seq)
+                : prev.seq ?? block.seq
             merged[merged.length - 1] = {
                 ...prev,
                 text: `${prev.text}${separator}${block.text}`,
                 invokedAt: prev.invokedAt ?? block.invokedAt,
                 durationMs: prev.durationMs ?? block.durationMs,
                 usage: prev.usage ?? block.usage,
-                model: prev.model ?? block.model
+                model: prev.model ?? block.model,
+                seq: mergedSeq
             }
             continue
         }
