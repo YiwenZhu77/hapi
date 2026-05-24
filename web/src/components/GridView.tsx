@@ -73,18 +73,23 @@ export function GridView({ sessions, baseUrl, token }: Props) {
 
     // First-time fallback: if storage was empty AND we now have sessions,
     // seed with the 4 most-recent active sessions.
+    //
+    // Only runs once. Do NOT prune pinnedIds against the live sessions list
+    // here — `sessions` lags behind localStorage when MessageBranchMenu (or
+    // any cross-route source) just added a new session, and it goes empty
+    // briefly during React Query refetches. Both cases used to drop the
+    // newly-added id and shuffle visual cell order, which broke Alt+digit
+    // focus and made branched sessions never appear in the grid. Pinned
+    // entries that no longer exist render as empty slots via the `pinned`
+    // filter below; stale ids get removed only when the hub explicitly
+    // emits session-removed via SSE (see useSSE.ts).
     useEffect(() => {
         if (initializedPinnedRef.current || sessions.length === 0) return
         initializedPinnedRef.current = true
         if (pinnedIds.length === 0) {
             setPinnedIds(sessions.filter(s => s.active).slice(0, 4).map(s => s.id))
-        } else {
-            // Drop ids that no longer correspond to a known session (deleted/archived).
-            const known = new Set(sessions.map(s => s.id))
-            const filtered = pinnedIds.filter(id => known.has(id))
-            if (filtered.length !== pinnedIds.length) setPinnedIds(filtered)
         }
-    }, [sessions, pinnedIds])
+    }, [sessions, pinnedIds, setPinnedIds])
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [focusedIdx, setFocusedIdx] = useState<number | null>(null)
     // Track LRU for grid eviction: whenever a cell becomes focused, stamp its
@@ -351,15 +356,24 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         onToggleStrip: () => actionsRef.current.toggleStrip(),
     })
 
-    const pinned = pinnedIds.map(id => sessions.find(s => s.id === id)).filter(Boolean) as SessionSummary[]
+    // Positional alignment with pinnedIds: each slot keeps its index even when
+    // the SessionSummary hasn't arrived yet (e.g. a freshly branched session
+    // before the sessions query refetches). Missing slots render as a
+    // placeholder so Alt+digit / iframeRefs stay 1:1 with pinnedIds.
+    const pinnedEntries: (SessionSummary | undefined)[] =
+        pinnedIds.map(id => sessions.find(s => s.id === id))
+    const pinned = pinnedEntries.filter((s): s is SessionSummary => Boolean(s))
     const unpinned = sessions.filter(s => !pinnedIds.includes(s.id))
 
-    // Strip mode: all panels in one row; otherwise adaptive grid
-    const isFiveLayout = !stripMode && pinned.length === 5
+    // Strip mode: all panels in one row; otherwise adaptive grid.
+    // Layout sizes by pinnedIds.length (positional slot count) so a slot
+    // still in flight (session not yet in `sessions`) keeps its place.
+    const slotCount = pinnedIds.length
+    const isFiveLayout = !stripMode && slotCount === 5
     const cols = stripMode
-        ? pinned.length || 1
-        : pinned.length <= 1 ? 1 : pinned.length === 3 ? 3 : pinned.length <= 4 ? 2 : isFiveLayout ? 6 : 3
-    const rows = stripMode ? 1 : isFiveLayout ? 2 : Math.ceil(pinned.length / cols)
+        ? slotCount || 1
+        : slotCount <= 1 ? 1 : slotCount === 3 ? 3 : slotCount <= 4 ? 2 : isFiveLayout ? 6 : 3
+    const rows = stripMode ? 1 : isFiveLayout ? 2 : Math.ceil(slotCount / cols)
 
     // Column span per item index for the 5-panel layout (not used in strip mode)
     const getColSpan = (i: number) => isFiveLayout ? (i < 3 ? 2 : 3) : 1
@@ -453,8 +467,27 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                     gridTemplateRows: `repeat(${rows}, 1fr)`,
                     gap: 4, flex: 1, minHeight: 0, padding: 4
                 }}>
-                    {pinned.map((session, i) => {
+                    {pinnedEntries.map((session, i) => {
                         const isFocused = focusedIdx === i
+                        if (!session) {
+                            // Placeholder: pinnedId is set but the SessionSummary
+                            // hasn't arrived yet (e.g. just-branched session
+                            // before queryClient refetch finishes). Keep the
+                            // slot so positional indexing (Alt+digit, LRU) holds.
+                            const id = pinnedIds[i]
+                            return (
+                                <div key={`pending:${id}`}
+                                    onClick={() => actionsRef.current.focusIframe(i + 1)}
+                                    style={{ position: 'relative', overflow: 'hidden', minHeight: 0,
+                                        gridColumn: getColSpan(i) > 1 ? `span ${getColSpan(i)}` : undefined,
+                                        border: isFocused ? '2px solid var(--app-link)' : '1px dashed var(--app-border)',
+                                        borderRadius: 8, display: 'flex', alignItems: 'center',
+                                        justifyContent: 'center', color: 'var(--app-hint)',
+                                        fontSize: 12, fontStyle: 'italic' }}>
+                                    Loading session…
+                                </div>
+                            )
+                        }
                         return (
                         <div key={session.id}
                             onClick={() => actionsRef.current.focusIframe(i + 1)}

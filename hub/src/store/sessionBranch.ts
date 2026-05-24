@@ -45,7 +45,19 @@ export function branchSession(
 
     const now = Date.now()
     const childId = randomUUID()
-    const childTag = newName ?? `branch of ${parent.tag ?? parentSessionId}`
+    // Prefer the human-readable name from metadata (set via session rename UI)
+    // over `tag`, which often stores an opaque agent-session id like a UUID.
+    // Fall back to tag, then to a short prefix of the parent id.
+    const parentDisplayName = (() => {
+        const meta = parent.metadata
+        if (meta && typeof meta === 'object' && typeof (meta as Record<string, unknown>).name === 'string') {
+            const name = ((meta as Record<string, unknown>).name as string).trim()
+            if (name) return name
+        }
+        if (parent.tag && parent.tag.trim()) return parent.tag
+        return parentSessionId.slice(0, 8)
+    })()
+    const childTag = newName ?? `${parentDisplayName}_branched`
 
     // Strip agent-session-id fields from copied metadata. The branched session is a
     // new conversation; the hub's deduplicateByAgentSessionId treats sessions sharing
