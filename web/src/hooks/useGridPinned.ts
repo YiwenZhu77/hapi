@@ -9,14 +9,21 @@ export const MAX_PINNED_CELLS = 6
 const PINNED_KEY = 'hapi.grid.pinnedIds'
 const LAST_VIEWED_KEY = 'hapi.grid.lastViewed'
 
-/** Fired (same-tab/window) whenever pinnedIds is written. We deliberately do
- * NOT subscribe to the native 'storage' event: HAPI runs as a PWA where each
- * window is its own scratchpad, and users expect independent grid layouts
- * across windows. Native 'storage' fires in OTHER windows of the same origin
- * — listening to it would force every window to mirror the same pinned list.
- * Same-window cross-route writes (e.g. MessageBranchMenu.addSessionToGrid)
- * still propagate via this custom event. */
+/** Fired (same-tab/window) whenever pinnedIds is written.
+ *
+ * We deliberately do NOT subscribe to the native 'storage' event: HAPI runs
+ * as a PWA where each window is its own scratchpad, and users expect
+ * independent grid layouts across windows. Native 'storage' fires in OTHER
+ * windows of the same origin — listening to it would force every window to
+ * mirror the same pinned list.
+ *
+ * Iframe ↔ parent propagation (e.g. MessageBranchMenu in a chat iframe
+ * calling addSessionToGrid, which the /grid page in the parent window
+ * should pick up) is handled via postMessage in `notifyGridUpdate`. The
+ * postMessage stays within the window's frame tree and doesn't leak to
+ * other windows. */
 export const GRID_UPDATE_EVENT = 'hapi:grid:update'
+const GRID_UPDATE_MESSAGE = 'hapi.grid.update'
 
 function safeGet(key: string): string | null {
     try { return localStorage.getItem(key) } catch { return null }
@@ -36,9 +43,24 @@ export function readPinnedIds(): string[] {
     } catch { return [] }
 }
 
+function notifyGridUpdate(): void {
+    // Same-window listeners (the /grid route's useGridPinned)
+    try { window.dispatchEvent(new Event(GRID_UPDATE_EVENT)) } catch { /* SSR */ }
+    // If this write happened inside an iframe, hop up the frame tree so the
+    // parent /grid view re-reads localStorage. Walk all ancestors in case
+    // we're nested deeper than one level.
+    try {
+        let w: Window = window
+        while (w.parent && w.parent !== w) {
+            w = w.parent
+            w.postMessage({ type: GRID_UPDATE_MESSAGE }, '*')
+        }
+    } catch { /* cross-origin parent — shouldn't happen here */ }
+}
+
 export function writePinnedIds(ids: string[]): void {
     safeSet(PINNED_KEY, JSON.stringify(ids))
-    try { window.dispatchEvent(new Event(GRID_UPDATE_EVENT)) } catch { /* no-op (SSR) */ }
+    notifyGridUpdate()
 }
 
 export function readLastViewed(): Record<string, number> {
@@ -110,9 +132,16 @@ export function useGridPinned(): [string[], (ids: string[] | ((prev: string[]) =
 
     useEffect(() => {
         const sync = () => setPinnedIdsState(readPinnedIds())
+        const onMessage = (e: MessageEvent) => {
+            if (e.data && typeof e.data === 'object' && e.data.type === GRID_UPDATE_MESSAGE) {
+                sync()
+            }
+        }
         window.addEventListener(GRID_UPDATE_EVENT, sync)
+        window.addEventListener('message', onMessage)
         return () => {
             window.removeEventListener(GRID_UPDATE_EVENT, sync)
+            window.removeEventListener('message', onMessage)
         }
     }, [])
 
