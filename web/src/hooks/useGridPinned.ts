@@ -9,8 +9,13 @@ export const MAX_PINNED_CELLS = 6
 const PINNED_KEY = 'hapi.grid.pinnedIds'
 const LAST_VIEWED_KEY = 'hapi.grid.lastViewed'
 
-/** Fired (same-tab) whenever pinnedIds is written. Native 'storage' event
- * already handles cross-tab; this complements it for in-tab listeners. */
+/** Fired (same-tab/window) whenever pinnedIds is written. We deliberately do
+ * NOT subscribe to the native 'storage' event: HAPI runs as a PWA where each
+ * window is its own scratchpad, and users expect independent grid layouts
+ * across windows. Native 'storage' fires in OTHER windows of the same origin
+ * — listening to it would force every window to mirror the same pinned list.
+ * Same-window cross-route writes (e.g. MessageBranchMenu.addSessionToGrid)
+ * still propagate via this custom event. */
 export const GRID_UPDATE_EVENT = 'hapi:grid:update'
 
 function safeGet(key: string): string | null {
@@ -105,14 +110,9 @@ export function useGridPinned(): [string[], (ids: string[] | ((prev: string[]) =
 
     useEffect(() => {
         const sync = () => setPinnedIdsState(readPinnedIds())
-        const storageHandler = (e: StorageEvent) => {
-            if (e.key === PINNED_KEY || e.key === null) sync()
-        }
         window.addEventListener(GRID_UPDATE_EVENT, sync)
-        window.addEventListener('storage', storageHandler)
         return () => {
             window.removeEventListener(GRID_UPDATE_EVENT, sync)
-            window.removeEventListener('storage', storageHandler)
         }
     }, [])
 

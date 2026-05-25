@@ -506,46 +506,36 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                     gridTemplateRows: `repeat(${rows}, 1fr)`,
                     gap: 4, flex: 1, minHeight: 0, padding: 4
                 }}>
-                    {pinnedEntries.map((session, i) => {
+                    {pinnedIds.map((id, i) => {
+                        // Key off `id` (not `session.id`) so the iframe stays
+                        // mounted across `sessions` refetches that briefly omit
+                        // a pinned id. Earlier we keyed off `session.id` and
+                        // fell back to a Loading placeholder when session was
+                        // undefined — that switched React keys and unmounted
+                        // the iframe, causing a fresh page load and a stuck
+                        // "Loading…" state after every prompt-send invalidate.
+                        const session = pinnedEntries[i]
                         const isFocused = focusedIdx === i
-                        if (!session) {
-                            // Placeholder: pinnedId is set but the SessionSummary
-                            // hasn't arrived yet (e.g. just-branched session
-                            // before queryClient refetch finishes). Keep the
-                            // slot so positional indexing (Alt+digit, LRU) holds.
-                            const id = pinnedIds[i]
-                            return (
-                                <div key={`pending:${id}`}
-                                    onClick={() => actionsRef.current.focusIframe(i + 1)}
-                                    style={{ position: 'relative', overflow: 'hidden', minHeight: 0,
-                                        gridColumn: getColSpan(i) > 1 ? `span ${getColSpan(i)}` : undefined,
-                                        border: isFocused ? '2px solid var(--app-link)' : '1px dashed var(--app-border)',
-                                        borderRadius: 8, display: 'flex', alignItems: 'center',
-                                        justifyContent: 'center', color: 'var(--app-hint)',
-                                        fontSize: 12, fontStyle: 'italic' }}>
-                                    Loading session…
-                                </div>
-                            )
-                        }
+                        const isNotified = session ? notifiedIds.has(session.id) : false
+                        const isFlashing = session ? flashingIds.has(session.id) : false
+                        const isThinking = session?.active && session?.thinking
+                        const dotColor = isNotified ? '#f97316' : isThinking ? '#3b82f6' : '#34c759'
+                        const dotSize = 8
+                        const titleColor = isThinking ? '#93c5fd' : '#fff'
+                        const subColor = isThinking ? 'rgba(147,197,253,0.7)' : 'rgba(255,255,255,0.6)'
+                        const closeColor = isThinking ? 'rgba(147,197,253,0.5)' : 'rgba(255,255,255,0.4)'
                         return (
-                        <div key={session.id}
+                        <div key={id}
                             onClick={() => actionsRef.current.focusIframe(i + 1)}
                             style={{ position: 'relative', overflow: 'hidden', minHeight: 0,
                                 gridColumn: getColSpan(i) > 1 ? `span ${getColSpan(i)}` : undefined,
                                 border: isFocused ? '2px solid var(--app-link)' : '1px solid var(--app-border)',
                                 borderRadius: 8, transition: 'border-color 0.15s' }}>
 
-                            {/* Floating pill — right-aligned */}
-                            {(() => {
-                                const isNotified = notifiedIds.has(session.id)
-                                const isFlashing = flashingIds.has(session.id)
-                                const isThinking = session.active && session.thinking
-                                const dotColor = isNotified ? '#f97316' : isThinking ? '#3b82f6' : '#34c759'
-                                const dotSize = 8
-                                const titleColor = isThinking ? '#93c5fd' : '#fff'
-                                const subColor = isThinking ? 'rgba(147,197,253,0.7)' : 'rgba(255,255,255,0.6)'
-                                const closeColor = isThinking ? 'rgba(147,197,253,0.5)' : 'rgba(255,255,255,0.4)'
-                                return (
+                            {/* Floating pill — right-aligned. Hidden until the
+                                SessionSummary is available so we never show stale
+                                title chrome over a fresh iframe. */}
+                            {session && (
                                 <div className="grid-cell-overlay" style={{
                                     position: 'absolute', top: 5, right: 5, zIndex: 10,
                                     display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -595,13 +585,14 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                                         <CloseIcon />
                                     </button>
                                 </div>
-                                )
-                            })()}
+                            )}
 
-                            {/* iframe fills the full cell */}
+                            {/* iframe fills the full cell. src keyed off the
+                                pinned id directly, so it stays mounted even when
+                                the SessionSummary is briefly missing. */}
                             <iframe
                                 ref={el => { iframeRefs.current[i] = el }}
-                                src={iframeUrl(session.id)}
+                                src={iframeUrl(id)}
                                 style={{ display: 'block', width: '100%', height: '100%',
                                     border: 'none', position: 'absolute', inset: 0 }}
                                 allow="microphone"
