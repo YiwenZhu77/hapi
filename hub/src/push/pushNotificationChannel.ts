@@ -36,8 +36,15 @@ export class PushNotificationChannel implements NotificationChannel {
         }
 
         const url = payload.data?.url ?? this.buildSessionPath(session.id)
+        // Always do both: in-page toast for clients currently watching, and a
+        // push for OS-level notification (other devices in the same namespace,
+        // or this device when it's backgrounded). The previous SSE-first
+        // short-circuit suppressed push for the entire namespace whenever any
+        // one client was visible — a phone foregrounded on the desk muted the
+        // desktop PWA in the background. SW dedupes via the payload's tag, so
+        // the same alert won't stack on a foregrounded device.
         if (this.visibilityTracker.hasVisibleConnection(session.namespace)) {
-            const delivered = await this.sseManager.sendToast(session.namespace, {
+            void this.sseManager.sendToast(session.namespace, {
                 type: 'toast',
                 data: {
                     title: payload.title,
@@ -46,9 +53,6 @@ export class PushNotificationChannel implements NotificationChannel {
                     url
                 }
             })
-            if (delivered > 0) {
-                return
-            }
         }
 
         await this.pushService.sendToNamespace(session.namespace, payload)
@@ -74,8 +78,15 @@ export class PushNotificationChannel implements NotificationChannel {
         }
 
         const url = payload.data?.url ?? this.buildSessionPath(session.id)
+        // Always do both: in-page toast for clients currently watching, and a
+        // push for OS-level notification (other devices in the same namespace,
+        // or this device when it's backgrounded). The previous SSE-first
+        // short-circuit suppressed push for the entire namespace whenever any
+        // one client was visible — a phone foregrounded on the desk muted the
+        // desktop PWA in the background. SW dedupes via the payload's tag, so
+        // the same alert won't stack on a foregrounded device.
         if (this.visibilityTracker.hasVisibleConnection(session.namespace)) {
-            const delivered = await this.sseManager.sendToast(session.namespace, {
+            void this.sseManager.sendToast(session.namespace, {
                 type: 'toast',
                 data: {
                     title: payload.title,
@@ -84,9 +95,6 @@ export class PushNotificationChannel implements NotificationChannel {
                     url
                 }
             })
-            if (delivered > 0) {
-                return
-            }
         }
 
         await this.pushService.sendToNamespace(session.namespace, payload)
@@ -116,8 +124,15 @@ export class PushNotificationChannel implements NotificationChannel {
         }
 
         const url = payload.data?.url ?? this.buildSessionPath(session.id)
+        // Always do both: in-page toast for clients currently watching, and a
+        // push for OS-level notification (other devices in the same namespace,
+        // or this device when it's backgrounded). The previous SSE-first
+        // short-circuit suppressed push for the entire namespace whenever any
+        // one client was visible — a phone foregrounded on the desk muted the
+        // desktop PWA in the background. SW dedupes via the payload's tag, so
+        // the same alert won't stack on a foregrounded device.
         if (this.visibilityTracker.hasVisibleConnection(session.namespace)) {
-            const delivered = await this.sseManager.sendToast(session.namespace, {
+            void this.sseManager.sendToast(session.namespace, {
                 type: 'toast',
                 data: {
                     title: payload.title,
@@ -126,9 +141,6 @@ export class PushNotificationChannel implements NotificationChannel {
                     url
                 }
             })
-            if (delivered > 0) {
-                return
-            }
         }
 
         await this.pushService.sendToNamespace(session.namespace, payload)

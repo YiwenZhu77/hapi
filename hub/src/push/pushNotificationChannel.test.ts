@@ -15,7 +15,12 @@ function createSession(overrides: Partial<Session> = {}): Session {
 }
 
 describe('PushNotificationChannel', () => {
-    it('sends task notifications to visible web clients before falling back to push', async () => {
+    it('sends task notifications via BOTH SSE toast and push when a client is visible', async () => {
+        // Earlier behavior was SSE-first with push skipped on successful toast.
+        // That suppressed push for the whole namespace whenever any client was
+        // visible — a foregrounded phone muted the desktop PWA in the back.
+        // Now we always send the push so backgrounded devices in the same
+        // namespace still get OS notifications. SW dedupes via payload.tag.
         const pushed: Array<{ namespace: string; payload: PushPayload }> = []
         const toasts: unknown[] = []
         const channel = new PushNotificationChannel(
@@ -42,7 +47,7 @@ describe('PushNotificationChannel', () => {
         })
 
         expect(toasts).toHaveLength(1)
-        expect(pushed).toHaveLength(0)
+        expect(pushed).toHaveLength(1)
     })
 
     it('does not reuse one replacement tag for all task notifications in a session', async () => {
