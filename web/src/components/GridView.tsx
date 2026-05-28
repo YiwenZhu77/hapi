@@ -254,9 +254,14 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             if (!id) return
             setRenameTargetId(id)
         },
-        // Permanently delete the session: abort the running agent (if active)
-        // then DELETE on the DB, so the session disappears from the sidebar
-        // and the Cmd+P palette. Unpins from grid too.
+        // Permanently delete the session, mirroring the sidebar's
+        // "archive → delete" two-step. archiveSession kills the agent
+        // process via runner RPC (KillSession), waits for the session to
+        // flip to inactive, then deleteSession removes the DB row. After
+        // that the session-removed SSE event drops it from the sidebar +
+        // the Cmd+P palette query cache. A simple abort+delete fails:
+        // abort interrupts the current turn but the session stays active,
+        // and deleteSession rejects active sessions.
         killCell(idx?: number) {
             let target: number | null | undefined = (idx !== undefined && idx >= 0) ? idx : focusedIdx
             if (target === null || target === undefined) target = pinnedIds.length > 0 ? 0 : null
@@ -267,9 +272,10 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             ;(async () => {
                 try {
                     if (session?.active) {
-                        await api.abortSession(id)
+                        await api.archiveSession(id)
                     }
                     await api.deleteSession(id)
+                    await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
                 } catch (err) {
                     console.error('[GridView] killCell failed', err)
                 }
