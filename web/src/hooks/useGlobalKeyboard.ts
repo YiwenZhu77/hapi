@@ -13,8 +13,12 @@ type Options = {
     onOpenSearch?: () => void
     // <Primary>+F: replace currently focused grid cell
     onReplaceCell?: () => void
-    // <Primary>+X: close currently focused grid cell
+    // <Primary>+X: close currently focused grid cell (unpin)
     onCloseCell?: () => void
+    // <Primary>+Shift+X: kill the focused session (abort + delete from DB)
+    onKillCell?: () => void
+    // <Primary>+Shift+N: rename the focused grid cell's session
+    onRenameCell?: () => void
     // <Primary>+': toggle strip/grid layout
     onToggleStrip?: () => void
 }
@@ -65,13 +69,19 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
                 if (options.onReplaceCell) { e.preventDefault(); options.onReplaceCell(); return }
                 return
             }
-            // <Primary>+X → close focused cell
+            // <Primary>+Shift+X → kill focused session (abort + delete)
+            if (e.code === 'KeyX' && e.shiftKey) {
+                if (options.onKillCell) { e.preventDefault(); options.onKillCell(); return }
+                return
+            }
+            // <Primary>+X → close focused cell (unpin only)
             if (e.code === 'KeyX' && !e.shiftKey) {
                 if (options.onCloseCell) { e.preventDefault(); options.onCloseCell(); return }
                 return
             }
-            // <Primary>+Shift+N — new session
+            // <Primary>+Shift+N — rename focused cell (grid) or new session (elsewhere)
             if (e.code === 'KeyN' && e.shiftKey) {
+                if (options.onRenameCell) { e.preventDefault(); options.onRenameCell(); return }
                 e.preventDefault()
                 navigate({ to: '/sessions/new' })
             }
@@ -126,5 +136,5 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
             window.removeEventListener('keydown', onKeyDown, true)
             window.removeEventListener('keydown', onScrollMod, true)
         }
-    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onScrollHalfPage, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onToggleStrip])
+    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onScrollHalfPage, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onKillCell, options.onRenameCell, options.onToggleStrip])
 }

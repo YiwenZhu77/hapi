@@ -188,6 +188,8 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         openAddModal: () => {},
         openReplaceModal: (_idx?: number) => {},
         closeCell: (_idx?: number) => {},
+        renameCell: (_idx?: number) => {},
+        killCell: (_idx?: number) => {},
     })
 
     // Rebuild actionsRef on every render so it always closes over current state
@@ -240,6 +242,38 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             if (target === null) return
             const id = pinnedIds[target]
             if (!id) return
+            setPinnedIds(prev => prev.filter(p => p !== id))
+            setExpandedId(prev => prev === id ? null : prev)
+            setFocusedIdx(null)
+        },
+        renameCell(idx?: number) {
+            let target: number | null | undefined = (idx !== undefined && idx >= 0) ? idx : focusedIdx
+            if (target === null || target === undefined) target = pinnedIds.length > 0 ? 0 : null
+            if (target === null) return
+            const id = pinnedIds[target]
+            if (!id) return
+            setRenameTargetId(id)
+        },
+        // Permanently delete the session: abort the running agent (if active)
+        // then DELETE on the DB, so the session disappears from the sidebar
+        // and the Cmd+P palette. Unpins from grid too.
+        killCell(idx?: number) {
+            let target: number | null | undefined = (idx !== undefined && idx >= 0) ? idx : focusedIdx
+            if (target === null || target === undefined) target = pinnedIds.length > 0 ? 0 : null
+            if (target === null) return
+            const id = pinnedIds[target]
+            if (!id || !api) return
+            const session = sessions.find(s => s.id === id)
+            ;(async () => {
+                try {
+                    if (session?.active) {
+                        await api.abortSession(id)
+                    }
+                    await api.deleteSession(id)
+                } catch (err) {
+                    console.error('[GridView] killCell failed', err)
+                }
+            })()
             setPinnedIds(prev => prev.filter(p => p !== id))
             setExpandedId(prev => prev === id ? null : prev)
             setFocusedIdx(null)
@@ -301,10 +335,22 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                 actionsRef.current.openReplaceModal(myIdx)
                 return
             }
+            if (e.code === 'KeyX' && e.shiftKey) {
+                e.preventDefault(); e.stopPropagation()
+                const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
+                actionsRef.current.killCell(myIdx)
+                return
+            }
             if (e.code === 'KeyX' && !e.shiftKey) {
                 e.preventDefault(); e.stopPropagation()
                 const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
                 actionsRef.current.closeCell(myIdx)
+                return
+            }
+            if (e.code === 'KeyN' && e.shiftKey) {
+                e.preventDefault(); e.stopPropagation()
+                const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
+                actionsRef.current.renameCell(myIdx)
                 return
             }
         }
@@ -373,6 +419,8 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         onOpenSearch: () => actionsRef.current.openAddModal(),
         onReplaceCell: () => actionsRef.current.openReplaceModal(),
         onCloseCell: () => actionsRef.current.closeCell(),
+        onKillCell: () => actionsRef.current.killCell(),
+        onRenameCell: () => actionsRef.current.renameCell(),
         onToggleStrip: () => actionsRef.current.toggleStrip(),
     })
 
@@ -532,59 +580,17 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                                 border: isFocused ? '2px solid var(--app-link)' : '1px solid var(--app-border)',
                                 borderRadius: 8, transition: 'border-color 0.15s' }}>
 
-                            {/* Floating pill — right-aligned. Hidden until the
-                                SessionSummary is available so we never show stale
-                                title chrome over a fresh iframe. */}
-                            {session && (
-                                <div className="grid-cell-overlay" style={{
-                                    position: 'absolute', top: 5, right: 5, zIndex: 10,
-                                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                                    maxWidth: 'calc(100% - 10px)',
-                                    padding: '3px 6px 3px 8px',
-                                    background: 'rgba(0,0,0,0.5)',
-                                    backdropFilter: 'blur(8px)',
-                                    WebkitBackdropFilter: 'blur(8px)',
-                                    borderRadius: 8,
-                                    border: '1px solid rgba(255,255,255,0.06)',
-                                }}>
-                                    {session.active && (
-                                        <div
-                                            className={isFlashing ? 'animate-toast-alert' : ''}
-                                            onAnimationEnd={() => setFlashingIds(prev => { const s = new Set(prev); s.delete(session.id); return s })}
-                                            style={{
-                                                width: dotSize,
-                                                height: dotSize,
-                                                borderRadius: '50%',
-                                                background: dotColor,
-                                                flexShrink: 0,
-                                                transition: 'width 0.2s, height 0.2s, background 0.3s',
-                                            }}
-                                        />
-                                    )}
-                                    <div style={{ minWidth: 0 }}>
-                                        <div
-                                            onDoubleClick={(e) => { e.stopPropagation(); setRenameTargetId(session.id) }}
-                                            title="Double-click to rename"
-                                            style={{ fontSize: 11, fontWeight: 700, color: titleColor,
-                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                            transition: 'color 0.3s', cursor: 'text' }}>
-                                            {getSessionTitle(session)}
-                                        </div>
-                                        <div style={{ fontSize: 10, color: subColor,
-                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                            transition: 'color 0.3s' }}>
-                                            {[session.metadata?.flavor, getSessionFolder(session)].filter(Boolean).join(' · ')}
-                                        </div>
-                                    </div>
-                                    <button onClick={e => { e.stopPropagation(); removeSession(session.id) }}
-                                        title={`Remove (${KBD.primary}X)`}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer',
-                                            color: closeColor, padding: '0 2px', borderRadius: 3,
-                                            display: 'flex', alignItems: 'center', flexShrink: 0,
-                                            transition: 'color 0.3s' }}>
-                                        <CloseIcon />
-                                    </button>
-                                </div>
+                            {/* No floating pill — the iframe's own header
+                                already shows session name + status. Keep the
+                                flash overlay for incoming-message highlight. */}
+                            {session?.active && isFlashing && (
+                                <div className="animate-toast-alert"
+                                    onAnimationEnd={() => setFlashingIds(prev => { const s = new Set(prev); s.delete(session.id); return s })}
+                                    style={{
+                                        position: 'absolute', inset: 0, zIndex: 10,
+                                        pointerEvents: 'none', borderRadius: 8,
+                                    }}
+                                />
                             )}
 
                             {/* iframe fills the full cell. src keyed off the
