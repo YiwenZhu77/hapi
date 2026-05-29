@@ -2,7 +2,13 @@ export const CLAUDE_MODEL_LABELS = {
     sonnet: 'Sonnet',
     'sonnet[1m]': 'Sonnet 1M',
     opus: 'Opus',
-    'opus[1m]': 'Opus 1M'
+    'opus[1m]': 'Opus 1M',
+    // Version-pinned ids. The bare aliases above resolve to the latest model
+    // server-side; these let you pin a specific release. The [1m] suffix is
+    // stripped by the claude CLI and turned into the 1M-context beta, so it
+    // works on full ids too (claude-opus-4-8[1m] → claude-opus-4-8 + 1M).
+    'claude-opus-4-8': 'Opus 4.8',
+    'claude-opus-4-8[1m]': 'Opus 4.8 1M'
 } as const
 
 export type ClaudeModelPreset = keyof typeof CLAUDE_MODEL_LABELS
