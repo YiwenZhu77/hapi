@@ -3,10 +3,16 @@ export type ClaudeComposerEffortOption = {
     label: string
 }
 
-const CLAUDE_EFFORT_PRESETS = ['medium', 'high', 'max'] as const
+// All five levels the claude runtime's --effort accepts
+// (low, medium, high, xhigh, max). The /v1/models capability block only
+// surfaces four — xhigh is a runtime-side level — so the source of truth
+// here is the CLI's --effort help, not the API metadata.
+const CLAUDE_EFFORT_PRESETS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
 const CLAUDE_EFFORT_LABELS: Record<(typeof CLAUDE_EFFORT_PRESETS)[number], string> = {
+    low: 'Low',
     medium: 'Medium',
     high: 'High',
+    xhigh: 'Ultra High',
     max: 'Max'
 }
 
