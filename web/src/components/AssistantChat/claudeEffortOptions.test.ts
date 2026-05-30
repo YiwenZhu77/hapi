@@ -11,17 +11,19 @@ describe('getClaudeComposerEffortOptions', () => {
             { value: 'high', label: 'High' },
             { value: 'xhigh', label: 'Ultra High' },
             { value: 'max', label: 'Max' },
+            { value: 'ultracode', label: 'Ultracode' },
         ])
     })
 
     it('does not duplicate preset Claude effort values', () => {
-        expect(getClaudeComposerEffortOptions('xhigh')).toEqual([
+        expect(getClaudeComposerEffortOptions('ultracode')).toEqual([
             { value: null, label: 'Auto' },
             { value: 'low', label: 'Low' },
             { value: 'medium', label: 'Medium' },
             { value: 'high', label: 'High' },
             { value: 'xhigh', label: 'Ultra High' },
             { value: 'max', label: 'Max' },
+            { value: 'ultracode', label: 'Ultracode' },
         ])
     })
 })

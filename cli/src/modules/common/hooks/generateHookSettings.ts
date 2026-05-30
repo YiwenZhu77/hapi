@@ -19,12 +19,19 @@ type HookSettings = {
     hooks: {
         SessionStart: HookCommandConfig[];
     };
+    // claude-code reads this per-session settings key: when true the session
+    // runs in ultracode mode (xhigh effort + standing dynamic-workflow
+    // orchestration). Requires an xhigh-capable model + dynamic workflows
+    // enabled in /config. We translate effort 'ultracode' from the UI into
+    // (--effort xhigh) + (this flag) at spawn time.
+    ultracode?: boolean;
 };
 
 export type HookSettingsOptions = {
     filenamePrefix: string;
     logLabel: string;
     hooksEnabled?: boolean;
+    ultracode?: boolean;
 };
 
 function shellQuote(value: string): string {
@@ -43,7 +50,7 @@ function shellJoin(parts: string[]): string {
     return parts.map(shellQuote).join(' ');
 }
 
-function buildHookSettings(command: string, hooksEnabled?: boolean): HookSettings {
+function buildHookSettings(command: string, hooksEnabled?: boolean, ultracode?: boolean): HookSettings {
     const hooks: HookSettings['hooks'] = {
         SessionStart: [
             {
@@ -63,6 +70,9 @@ function buildHookSettings(command: string, hooksEnabled?: boolean): HookSetting
         settings.hooksConfig = {
             enabled: hooksEnabled
         };
+    }
+    if (ultracode) {
+        settings.ultracode = true;
     }
 
     return settings;
@@ -88,7 +98,7 @@ export function generateHookSettingsFile(
     ]);
     const hookCommand = shellJoin([command, ...args]);
 
-    const settings = buildHookSettings(hookCommand, options.hooksEnabled);
+    const settings = buildHookSettings(hookCommand, options.hooksEnabled, options.ultracode);
 
     writeFileSync(filepath, JSON.stringify(settings, null, 4));
     logger.debug(`[${options.logLabel}] Created hook settings file: ${filepath}`);

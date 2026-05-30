@@ -332,7 +332,15 @@ export function query(config: {
     if (appendSystemPrompt) args.push('--append-system-prompt', stripNewlinesForWindowsShellArg(appendSystemPrompt))
     if (maxTurns) args.push('--max-turns', maxTurns.toString())
     if (model) args.push('--model', model)
-    if (effort) args.push('--effort', effort)
+    if (effort) {
+        // 'ultracode' is a HAPI-side effort value (xhigh + dynamic-workflow
+        // orchestration). The real claude --effort only accepts
+        // low/medium/high/xhigh/max, so map ultracode → xhigh here. The
+        // workflow-orchestration half rides in via the session settings key
+        // `ultracode: true` (set in generateHookSettings when effort is
+        // ultracode).
+        args.push('--effort', effort === 'ultracode' ? 'xhigh' : effort)
+    }
     if (canCallTool) {
         if (typeof prompt === 'string') {
             throw new Error('canCallTool callback requires --input-format stream-json. Please set prompt as an AsyncIterable.')

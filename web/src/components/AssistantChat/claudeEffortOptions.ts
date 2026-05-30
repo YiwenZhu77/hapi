@@ -3,17 +3,21 @@ export type ClaudeComposerEffortOption = {
     label: string
 }
 
-// All five levels the claude runtime's --effort accepts
-// (low, medium, high, xhigh, max). The /v1/models capability block only
-// surfaces four — xhigh is a runtime-side level — so the source of truth
-// here is the CLI's --effort help, not the API metadata.
-const CLAUDE_EFFORT_PRESETS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+// Effort options shown in the composer.
+// low/medium/high/xhigh/max are the claude runtime's real --effort values.
+// 'ultracode' is a HAPI-side pseudo-level: xhigh effort + standing
+// dynamic-workflow orchestration. The runtime's --effort REJECTS 'ultracode',
+// so the CLI maps it to (--effort xhigh) + the per-session `ultracode: true`
+// settings key (see cli/src/claude/sdk/query.ts + generateHookSettings.ts).
+// Needs an xhigh-capable model (Opus 4.8) and dynamic workflows enabled.
+const CLAUDE_EFFORT_PRESETS = ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'] as const
 const CLAUDE_EFFORT_LABELS: Record<(typeof CLAUDE_EFFORT_PRESETS)[number], string> = {
     low: 'Low',
     medium: 'Medium',
     high: 'High',
     xhigh: 'Ultra High',
-    max: 'Max'
+    max: 'Max',
+    ultracode: 'Ultracode'
 }
 
 function normalizeClaudeComposerEffort(effort?: string | null): string | null {

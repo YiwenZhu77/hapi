@@ -63,8 +63,14 @@ export const claudeCommand: CommandDefinition = {
                 if (!effort) {
                     throw new Error('Missing --effort value')
                 }
+                // Keep the structured value as-is (runClaude reads options.effort
+                // to decide whether to set ultracode in the session settings).
                 options.effort = effort
-                unknownArgs.push('--effort', effort)
+                // But the raw passthrough copy must use a value the real claude
+                // accepts: 'ultracode' is HAPI-side only (xhigh + workflows), so
+                // forward it as xhigh. The remote path translates the same way in
+                // query.ts; this keeps the local (-p) path consistent.
+                unknownArgs.push('--effort', effort === 'ultracode' ? 'xhigh' : effort)
             } else if (arg === '--started-by') {
                 options.startedBy = args[++i] as 'runner' | 'terminal'
             } else {

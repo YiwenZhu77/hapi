@@ -124,7 +124,13 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
 
     const hookSettingsPath = generateHookSettingsFile(hookServer.port, hookServer.token, {
         filenamePrefix: 'session-hook',
-        logLabel: 'generateHookSettings'
+        logLabel: 'generateHookSettings',
+        // 'ultracode' is a HAPI-side effort value = xhigh + dynamic-workflow
+        // orchestration. The real claude --effort rejects 'ultracode' (we map
+        // it to xhigh in query.ts), so the ultracode bit rides in via this
+        // per-session settings key instead. Captured at start; switching to/from
+        // ultracode mid-session needs a respawn, same as a model change.
+        ultracode: initialEffort === 'ultracode'
     });
     logger.debug(`[START] Generated hook settings file: ${hookSettingsPath}`);
 
