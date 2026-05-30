@@ -17,8 +17,6 @@ type Options = {
     onCloseCell?: () => void
     // <Primary>+Shift+X: kill the focused session (abort + delete from DB)
     onKillCell?: () => void
-    // <Primary>+Shift+N: rename the focused grid cell's session
-    onRenameCell?: () => void
     // <Primary>+': toggle strip/grid layout
     onToggleStrip?: () => void
 }
@@ -79,9 +77,8 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
                 if (options.onCloseCell) { e.preventDefault(); options.onCloseCell(); return }
                 return
             }
-            // <Primary>+Shift+N — rename focused cell (grid) or new session (elsewhere)
+            // <Primary>+Shift+N — new session
             if (e.code === 'KeyN' && e.shiftKey) {
-                if (options.onRenameCell) { e.preventDefault(); options.onRenameCell(); return }
                 e.preventDefault()
                 navigate({ to: '/sessions/new' })
             }
@@ -136,5 +133,5 @@ export function useGlobalKeyboard(sessions: { id: string }[], options: Options =
             window.removeEventListener('keydown', onKeyDown, true)
             window.removeEventListener('keydown', onScrollMod, true)
         }
-    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onScrollHalfPage, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onKillCell, options.onRenameCell, options.onToggleStrip])
+    }, [navigate, sessions, options.onSelectIndex, options.onCyclePinned, options.onScrollHalfPage, options.onOpenSearch, options.onReplaceCell, options.onCloseCell, options.onKillCell, options.onToggleStrip])
 }

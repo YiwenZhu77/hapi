@@ -2,7 +2,7 @@ import { getFlavorLabel, isKnownFlavor } from '@hapi/protocol'
 import type { Session } from '../sync/syncEngine'
 
 export function getSessionName(session: Session): string {
-    if (session.metadata?.name) return session.metadata.name
+    // Unified on the HAPI auto-title (summary.text); metadata.name ignored.
     if (session.metadata?.summary?.text) return session.metadata.summary.text
     if (session.metadata?.path) {
         const parts = session.metadata.path.split('/').filter(Boolean)

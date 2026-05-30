@@ -65,9 +65,7 @@ export function buildGoalStateMessages(
 }
 
 function getOutlineTitle(session: Session): string {
-    if (session.metadata?.name) {
-        return session.metadata.name
-    }
+    // Unified on the HAPI auto-title (summary.text); metadata.name ignored.
     if (session.metadata?.summary?.text) {
         return session.metadata.summary.text
     }
