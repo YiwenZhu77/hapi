@@ -6,6 +6,7 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
+import { getSessionTitle, getSessionPrefix } from '@/lib/sessionTitle'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CopyIcon, CheckIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
@@ -382,20 +383,6 @@ function ChevronIcon(props: { className?: string; collapsed?: boolean }) {
     )
 }
 
-export function getSessionTitle(session: SessionSummary): string {
-    if (session.metadata?.name) {
-        return session.metadata.name
-    }
-    if (session.metadata?.summary?.text) {
-        return session.metadata.summary.text
-    }
-    if (session.metadata?.path) {
-        const parts = session.metadata.path.split('/').filter(Boolean)
-        return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)
-    }
-    return session.id.slice(0, 8)
-}
-
 function getTodoProgress(session: SessionSummary): { completed: number; total: number } | null {
     if (!session.todoProgress) return null
     if (session.todoProgress.completed === session.todoProgress.total) return null
@@ -656,7 +643,7 @@ function SessionItem(props: {
             <RenameSessionDialog
                 isOpen={renameOpen}
                 onClose={() => setRenameOpen(false)}
-                currentName={sessionName}
+                currentName={getSessionPrefix(s)}
                 onRename={renameSession}
                 isPending={isPending}
             />

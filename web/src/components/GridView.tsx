@@ -5,20 +5,12 @@ import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard'
 import { SessionSearchModal } from '@/components/SessionSearchModal'
 import { KBD, isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
+import { getSessionTitle, getSessionPrefix } from '@/lib/sessionTitle'
 import { NewSessionModal } from '@/components/NewSessionModal'
 import { useAppContext } from '@/lib/app-context'
 import { queryKeys } from '@/lib/query-keys'
 import { useGridPinned, noteCellViewed, MAX_PINNED_CELLS } from '@/hooks/useGridPinned'
 import type { SessionSummary } from '@/types/api'
-
-function getSessionTitle(session: SessionSummary): string {
-    if (session.metadata?.name) return session.metadata.name
-    if (session.metadata?.path) {
-        const parts = session.metadata.path.split('/').filter(Boolean)
-        return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)
-    }
-    return session.id.slice(0, 8)
-}
 
 function getSessionFolder(session: SessionSummary): string {
     const path = (session.metadata as any)?.worktree?.basePath ?? session.metadata?.path ?? ''
@@ -649,7 +641,7 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             <RenameSessionDialog
                 isOpen={renameTargetId !== null}
                 onClose={() => setRenameTargetId(null)}
-                currentName={renameTargetId ? getSessionTitle(sessions.find(s => s.id === renameTargetId) ?? { id: '', metadata: null } as SessionSummary) : ''}
+                currentName={renameTargetId ? getSessionPrefix(sessions.find(s => s.id === renameTargetId) ?? { id: '', metadata: null } as SessionSummary) : ''}
                 onRename={handleRename}
                 isPending={isRenaming}
             />

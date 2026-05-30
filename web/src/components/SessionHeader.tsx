@@ -5,23 +5,10 @@ import { isTelegramApp } from '@/hooks/useTelegram'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
+import { getSessionTitle, getSessionPrefix } from '@/lib/sessionTitle'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { getSessionModelLabel } from '@/lib/sessionModelLabel'
 import { useTranslation } from '@/lib/use-translation'
-
-function getSessionTitle(session: Session): string {
-    if (session.metadata?.name) {
-        return session.metadata.name
-    }
-    if (session.metadata?.summary?.text) {
-        return session.metadata.summary.text
-    }
-    if (session.metadata?.path) {
-        const parts = session.metadata.path.split('/').filter(Boolean)
-        return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)
-    }
-    return session.id.slice(0, 8)
-}
 
 function FilesIcon(props: { className?: string }) {
     return (
@@ -229,7 +216,7 @@ export function SessionHeader(props: {
             <RenameSessionDialog
                 isOpen={renameOpen}
                 onClose={() => setRenameOpen(false)}
-                currentName={title}
+                currentName={getSessionPrefix(session)}
                 onRename={renameSession}
                 isPending={isPending}
             />

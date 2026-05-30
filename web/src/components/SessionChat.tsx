@@ -27,6 +27,7 @@ import { computeLastCommittedSeq, useHappyRuntime } from '@/lib/assistant-runtim
 import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
 import { useTranslation } from '@/lib/use-translation'
 import { SessionHeader } from '@/components/SessionHeader'
+import { getSessionTitle } from '@/lib/sessionTitle'
 import { TeamPanel } from '@/components/TeamPanel'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
@@ -62,19 +63,6 @@ export function buildGoalStateMessages(
     return eligiblePendingMessages.length > 0
         ? mergeMessages(eligibleMessages, eligiblePendingMessages)
         : eligibleMessages
-}
-
-function getOutlineTitle(session: Session): string {
-    if (session.metadata?.name) {
-        return session.metadata.name
-    }
-    if (session.metadata?.summary?.text) {
-        return session.metadata.summary.text
-    }
-    if (session.metadata?.path) {
-        return session.metadata.path
-    }
-    return session.id.slice(0, 8)
 }
 
 function hasAbortableAgentRun(blocks: readonly ChatBlock[]): boolean {
@@ -381,7 +369,7 @@ export function SessionChat(props: {
     )
 
     const outlineTitle = useMemo(
-        () => getOutlineTitle(props.session),
+        () => getSessionTitle(props.session),
         [props.session]
     )
 

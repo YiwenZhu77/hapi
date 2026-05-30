@@ -1,14 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import type { SessionSummary } from '@/types/api'
-
-function getSessionTitle(session: SessionSummary): string {
-    if (session.metadata?.name) return session.metadata.name
-    if (session.metadata?.path) {
-        const parts = session.metadata.path.split('/').filter(Boolean)
-        return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)
-    }
-    return session.id.slice(0, 8)
-}
+import { getSessionTitle } from '@/lib/sessionTitle'
 
 function getSessionFolder(session: SessionSummary): string {
     const path = (session.metadata as any)?.worktree?.basePath ?? session.metadata?.path ?? ''
