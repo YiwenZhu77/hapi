@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import type { SessionSummary } from '@/types/api'
 
 function getSessionTitle(session: SessionSummary): string {
-    // Unified on the HAPI auto-title (summary.text); metadata.name ignored.
-    if (session.metadata?.summary?.text) return session.metadata.summary.text
+    if (session.metadata?.name) return session.metadata.name
     if (session.metadata?.path) {
         const parts = session.metadata.path.split('/').filter(Boolean)
         return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)

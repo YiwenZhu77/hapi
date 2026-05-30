@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useGlobalKeyboard } from '@/hooks/useGlobalKeyboard'
 import { SessionSearchModal } from '@/components/SessionSearchModal'
 import { KBD, isPrimaryMod, isDigitFocusMod } from '@/lib/platform'
+import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { NewSessionModal } from '@/components/NewSessionModal'
 import { useAppContext } from '@/lib/app-context'
 import { queryKeys } from '@/lib/query-keys'
@@ -11,8 +12,7 @@ import { useGridPinned, noteCellViewed, MAX_PINNED_CELLS } from '@/hooks/useGrid
 import type { SessionSummary } from '@/types/api'
 
 function getSessionTitle(session: SessionSummary): string {
-    // Unified on the HAPI auto-title (summary.text); metadata.name ignored.
-    if (session.metadata?.summary?.text) return session.metadata.summary.text
+    if (session.metadata?.name) return session.metadata.name
     if (session.metadata?.path) {
         const parts = session.metadata.path.split('/').filter(Boolean)
         return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)
@@ -110,7 +110,21 @@ export function GridView({ sessions, baseUrl, token }: Props) {
     useEffect(() => {
         try { localStorage.setItem(STRIP_KEY, stripMode ? '1' : '0') } catch { /* ignore */ }
     }, [stripMode])
+    const [renameTargetId, setRenameTargetId] = useState<string | null>(null)
+    const [isRenaming, setIsRenaming] = useState(false)
     const iframeRefs = useRef<(HTMLIFrameElement | null)[]>([])
+
+    const handleRename = useCallback(async (newName: string) => {
+        if (!api || !renameTargetId) return
+        setIsRenaming(true)
+        try {
+            await api.renameSession(renameTargetId, newName)
+            await queryClient.invalidateQueries({ queryKey: queryKeys.session(renameTargetId) })
+            await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+        } finally {
+            setIsRenaming(false)
+        }
+    }, [api, renameTargetId, queryClient])
 
     // ── notification dot tracking ────────────────────────────────────────────
     // notifiedIds: sessions with a pending notification (dot turns orange)
@@ -174,6 +188,7 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         openAddModal: () => {},
         openReplaceModal: (_idx?: number) => {},
         closeCell: (_idx?: number) => {},
+        renameCell: (_idx?: number) => {},
         killCell: (_idx?: number) => {},
     })
 
@@ -230,6 +245,14 @@ export function GridView({ sessions, baseUrl, token }: Props) {
             setPinnedIds(prev => prev.filter(p => p !== id))
             setExpandedId(prev => prev === id ? null : prev)
             setFocusedIdx(null)
+        },
+        renameCell(idx?: number) {
+            let target: number | null | undefined = (idx !== undefined && idx >= 0) ? idx : focusedIdx
+            if (target === null || target === undefined) target = pinnedIds.length > 0 ? 0 : null
+            if (target === null) return
+            const id = pinnedIds[target]
+            if (!id) return
+            setRenameTargetId(id)
         },
         // Permanently delete the session, mirroring the sidebar's
         // "archive → delete" two-step. archiveSession kills the agent
@@ -330,6 +353,12 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                 actionsRef.current.closeCell(myIdx)
                 return
             }
+            if (e.code === 'KeyN' && e.shiftKey) {
+                e.preventDefault(); e.stopPropagation()
+                const myIdx = iframeRefs.current.findIndex(ref => ref?.contentWindow === win)
+                actionsRef.current.renameCell(myIdx)
+                return
+            }
         }
 
         win.addEventListener('keydown', handler, true)
@@ -397,6 +426,7 @@ export function GridView({ sessions, baseUrl, token }: Props) {
         onReplaceCell: () => actionsRef.current.openReplaceModal(),
         onCloseCell: () => actionsRef.current.closeCell(),
         onKillCell: () => actionsRef.current.killCell(),
+        onRenameCell: () => actionsRef.current.renameCell(),
         onToggleStrip: () => actionsRef.current.toggleStrip(),
     })
 
@@ -613,6 +643,15 @@ export function GridView({ sessions, baseUrl, token }: Props) {
                 isOpen={isNewSessionOpen}
                 onClose={() => setIsNewSessionOpen(false)}
                 onCreated={id => addSession(id)}
+            />
+
+            {/* Double-click title: rename session */}
+            <RenameSessionDialog
+                isOpen={renameTargetId !== null}
+                onClose={() => setRenameTargetId(null)}
+                currentName={renameTargetId ? getSessionTitle(sessions.find(s => s.id === renameTargetId) ?? { id: '', metadata: null } as SessionSummary) : ''}
+                onRename={handleRename}
+                isPending={isRenaming}
             />
         </div>
     )
