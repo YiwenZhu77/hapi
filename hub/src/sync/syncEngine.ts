@@ -381,8 +381,13 @@ export class SyncEngine {
             return onlineMachines[0]
         })()
 
-        // 3. Spawn a fresh session inheriting parent's settings. resumeSessionId
-        //    is left undefined: the branch is a new conversation, not a resume.
+        // 3. Spawn a session inheriting parent's settings. For claude we fork the
+        //    parent's transcript so the branch carries full conversation history;
+        //    the runner copies the parent JSONL and resumes the copy, never the
+        //    parent's own file. Non-claude flavors get a fresh session.
+        const forkFromClaudeSessionId = flavor === 'claude'
+            ? (this.resolveAgentResumeId(parent, namespace) ?? undefined)
+            : undefined
         const spawnResult = await this.rpcGateway.spawnSession(
             targetMachine.id,
             metadata.path,
@@ -394,7 +399,8 @@ export class SyncEngine {
             undefined,
             undefined,
             parent.effort ?? undefined,
-            parent.permissionMode ?? undefined
+            parent.permissionMode ?? undefined,
+            forkFromClaudeSessionId
         )
 
         if (spawnResult.type !== 'success') {

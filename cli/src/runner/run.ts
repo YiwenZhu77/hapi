@@ -20,6 +20,7 @@ import { isRetryableConnectionError } from '@/utils/errorUtils';
 import { cleanupRunnerState, getInstalledCliMtimeMs, isRunnerRunningCurrentlyInstalledHappyVersion, stopRunner } from './controlClient';
 import { startRunnerControlServer } from './controlServer';
 import { createWorktree, removeWorktree, type WorktreeInfo } from './worktree';
+import { forkClaudeTranscript } from '@/claude/utils/forkTranscript';
 import { join } from 'path';
 import { buildMachineMetadata } from '@/agent/sessionFactory';
 import { resolveWorkspaceRoots } from '@/utils/workspaceRoot';
@@ -376,6 +377,24 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
             HAPI_WORKTREE_PATH: worktreeInfo.worktreePath,
             HAPI_WORKTREE_CREATED_AT: String(worktreeInfo.createdAt)
           };
+        }
+
+        // Branch-from-message true fork: copy the parent transcript and resume
+        // the copy, so the new session inherits full history while the parent's
+        // transcript is left untouched. claude only; falls back to a fresh
+        // (no-history) session if the parent transcript can't be found.
+        if (options.forkFromClaudeSessionId && (agent === 'claude' || !options.agent) && !options.resumeSessionId) {
+          try {
+            const forkId = await forkClaudeTranscript(spawnDirectory, options.forkFromClaudeSessionId);
+            if (forkId) {
+              options = { ...options, resumeSessionId: forkId };
+              logger.debug(`[RUNNER RUN] Forked transcript ${options.forkFromClaudeSessionId} -> ${forkId} for branch`);
+            } else {
+              logger.debug(`[RUNNER RUN] Parent transcript ${options.forkFromClaudeSessionId} not found; spawning fresh branch`);
+            }
+          } catch (forkError) {
+            logger.debug(`[RUNNER RUN] Transcript fork failed; spawning fresh branch:`, forkError);
+          }
         }
 
         const args = buildCliArgs(agent, options, yolo);

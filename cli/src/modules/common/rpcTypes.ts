@@ -5,6 +5,12 @@ export interface SpawnSessionOptions {
     directory: string
     sessionId?: string
     resumeSessionId?: string
+    /**
+     * When set (claude only), the runner forks this parent claude session id's
+     * transcript into a fresh copy and resumes the copy, so the branched session
+     * inherits full conversation history without touching the parent.
+     */
+    forkFromClaudeSessionId?: string
     approvedNewDirectoryCreation?: boolean
     agent?: AgentFlavor
     model?: string
