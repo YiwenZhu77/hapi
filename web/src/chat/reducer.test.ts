@@ -279,4 +279,97 @@ describe('reduceChatBlocks', () => {
             tokensUsed: 8016
         })
     })
+
+    it('does not inject answered AskUserQuestion permission cards', () => {
+        // Answered interactive questions live in agentState.completedRequests but
+        // their ids never appear as a tool_use in the transcript, so the
+        // permission-injection loop would otherwise append a stale card to the
+        // end of the block list — pinning it below every later message.
+        const reduced = reduceChatBlocks([
+            userMessage('user-after-answer', 'next thing', 100)
+        ], {
+            requests: null,
+            completedRequests: {
+                'toolu_q1': {
+                    tool: 'AskUserQuestion',
+                    arguments: { questions: [] },
+                    status: 'approved',
+                    createdAt: 200,
+                    completedAt: 300,
+                    answers: { Q: ['A'] }
+                }
+            }
+        })
+
+        const askCards = reduced.blocks.filter(
+            (b) => b.kind === 'tool-call' && b.tool.name === 'AskUserQuestion'
+        )
+        expect(askCards).toHaveLength(0)
+    })
+
+    it('does not inject answered request_user_input permission cards', () => {
+        const reduced = reduceChatBlocks([
+            userMessage('user-after-answer-2', 'next thing', 100)
+        ], {
+            requests: null,
+            completedRequests: {
+                'toolu_q2': {
+                    tool: 'request_user_input',
+                    arguments: { questions: [] },
+                    status: 'approved',
+                    createdAt: 200,
+                    completedAt: 300,
+                    answers: { Q: { answers: ['A'] } }
+                }
+            }
+        })
+
+        const askCards = reduced.blocks.filter(
+            (b) => b.kind === 'tool-call'
+                && (b.tool.name === 'request_user_input' || b.tool.name === 'AskUserQuestion')
+        )
+        expect(askCards).toHaveLength(0)
+    })
+
+    it('still injects a pending AskUserQuestion permission card', () => {
+        const reduced = reduceChatBlocks([], {
+            requests: {
+                'toolu_q3': {
+                    tool: 'AskUserQuestion',
+                    arguments: { questions: [] },
+                    createdAt: 1
+                }
+            },
+            completedRequests: null
+        })
+
+        const askCards = reduced.blocks.filter(
+            (b) => b.kind === 'tool-call' && b.tool.name === 'AskUserQuestion'
+        )
+        expect(askCards).toHaveLength(1)
+        expect(askCards[0]).toMatchObject({ kind: 'tool-call' })
+        if (askCards[0]?.kind === 'tool-call') {
+            expect(askCards[0].tool.permission?.status).toBe('pending')
+        }
+    })
+
+    it('still injects completed permission cards for non-interactive tools', () => {
+        const reduced = reduceChatBlocks([], {
+            requests: null,
+            completedRequests: {
+                'toolu_bash': {
+                    tool: 'Bash',
+                    arguments: { command: 'ls' },
+                    status: 'approved',
+                    createdAt: 1,
+                    completedAt: 2
+                }
+            }
+        })
+
+        const bashCards = reduced.blocks.filter(
+            (b) => b.kind === 'tool-call' && b.tool.name === 'Bash'
+        )
+        expect(bashCards).toHaveLength(1)
+    })
 })

@@ -2,12 +2,10 @@
 // stops the header, sidebar, Cmd+P palette, grid, and outline from drifting
 // apart (they used to each carry their own copy with different priorities).
 //
-// Display = "<prefix> · <auto>" where:
-//   prefix = metadata.name — a fixed manual name set via rename (Cmd+Shift+N /
-//            the ⋮ menu). Defaults to the folder basename when unset. HAPI
-//            never rewrites it.
-//   auto   = metadata.summary.text — the HAPI-generated auto-title, truncated
-//            so the combined string stays short.
+// Display name = metadata.name — a fixed manual name set via rename (Cmd+Shift+N
+// / the ⋮ menu), defaulting to the folder basename when unset. HAPI never
+// rewrites it. The HAPI-generated auto-title (metadata.summary.text) is kept in
+// the data model (used for notifications/preview) but is NOT shown in the name.
 
 export type TitleSession = {
     id: string
@@ -44,9 +42,11 @@ export function shortenAuto(text: string, max: number = AUTO_MAX): string {
     return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
-/** "<prefix> · <auto>", or just the prefix when there is no auto-title yet. */
+/**
+ * Session display name = the manual name (Cmd+Shift+N / ⋮ rename), or the folder
+ * basename when unset. The HAPI-generated auto-title (metadata.summary.text) is
+ * deliberately NOT appended: the user controls the name, HAPI never changes it.
+ */
 export function getSessionTitle(session: TitleSession): string {
-    const prefix = getSessionPrefix(session)
-    const auto = session.metadata?.summary?.text?.trim()
-    return auto ? `${prefix} · ${shortenAuto(auto)}` : prefix
+    return getSessionPrefix(session)
 }

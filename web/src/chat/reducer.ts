@@ -5,6 +5,8 @@ import { traceMessages, type TracedMessage } from '@/chat/tracer'
 import { dedupeAgentEvents, foldApiErrorEvents } from '@/chat/reducerEvents'
 import { collectTitleChanges, collectToolIdsFromMessages, ensureToolBlock, getPermissions } from '@/chat/reducerTools'
 import { reduceTimeline } from '@/chat/reducerTimeline'
+import { isAskUserQuestionToolName } from '@/components/ToolCard/askUserQuestion'
+import { isRequestUserInputToolName } from '@/components/ToolCard/requestUserInput'
 import { isRedundantGoalStatusMessageText } from '@hapi/protocol/messages'
 
 // Calculate context size from usage data
@@ -128,6 +130,19 @@ export function reduceChatBlocks(
     for (const [id, entry] of permissionsById) {
         if (toolIdsInMessages.has(id)) continue
         if (rootResult.toolBlocksById.has(id)) continue
+
+        // Answered interactive questions (AskUserQuestion / request_user_input)
+        // have no tool_use in the transcript, so they would otherwise be injected
+        // as standalone cards appended to the end of the block list — pinning the
+        // already-answered card below every later message. Once such a question is
+        // no longer pending, drop it: it has served its purpose. Pending questions
+        // still inject, since that card is what the user interacts with.
+        if (
+            entry.permission.status !== 'pending'
+            && (isAskUserQuestionToolName(entry.toolName) || isRequestUserInputToolName(entry.toolName))
+        ) {
+            continue
+        }
 
         const createdAt = entry.permission.createdAt ?? Date.now()
 
